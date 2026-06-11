@@ -1,0 +1,17 @@
+ ⨯ Error: Your project's URL and Key are required to create a Supabase client!
+
+Check your Supabase project's API settings to find these values
+
+https://supabase.com/dashboard/project/_/settings/api
+    at <unknown> (https://supabase.com/dashboard/project/_/settings/api)
+    at createClient (lib\supabase\server.ts:8:4)
+    at async HomePage (app\page.tsx:7:19)
+   6 |
+   7 |   return createServerClient(
+>  8 |     process.env.NEXT_PUBLIC_SUPABASE_URL!,
+     |    ^
+   9 |     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  10 |     {
+  11 |       cookies: { {
+  digest: '2167055656'
+}

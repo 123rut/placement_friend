@@ -1,0 +1,16 @@
+{
+  "name": "placement-internship-alert-agent",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace @piaa/web run dev",
+    "build:web": "npm --workspace @piaa/web run build",
+    "lint:web": "npm --workspace @piaa/web run lint",
+    "typecheck:web": "npm --workspace @piaa/web run typecheck",
+    "dev:worker": "npm --workspace @piaa/worker run dev"
+  }
+}
