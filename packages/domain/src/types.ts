@@ -15,7 +15,7 @@ export type NotificationChannel = "email" | "whatsapp" | "telegram" | "dashboard
 export type College = {
   id: string;
   name: string;
-  domain: string;
+  emailDomain: string;
   city: string;
   state: string;
   type: "government" | "private" | "deemed";

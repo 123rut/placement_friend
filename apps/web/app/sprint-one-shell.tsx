@@ -157,7 +157,7 @@ export function SprintOneShell({
 
           <p className="panel-note">
             {detectedCollege
-              ? `Domain ${detectedCollege.domain} maps to ${detectedCollege.city}, ${detectedCollege.state}.`
+              ? `Domain ${detectedCollege.emailDomain} maps to ${detectedCollege.city}, ${detectedCollege.state}.`
               : `Currently mapped colleges: ${colleges.length}. Add more domains in the Sprint 1 seed set as onboarding expands.`}
           </p>
         </div>

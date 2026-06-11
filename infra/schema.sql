@@ -1,7 +1,7 @@
 CREATE TABLE colleges (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  domain TEXT NOT NULL UNIQUE,
+  email_domain TEXT NOT NULL UNIQUE,
   city TEXT NOT NULL,
   state TEXT NOT NULL,
   type TEXT NOT NULL,
