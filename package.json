@@ -11,6 +11,11 @@
     "build:web": "npm --workspace @piaa/web run build",
     "lint:web": "npm --workspace @piaa/web run lint",
     "typecheck:web": "npm --workspace @piaa/web run typecheck",
-    "dev:worker": "npm --workspace @piaa/worker run dev"
+    "dev:worker": "npm --workspace @piaa/worker run dev",
+    "db:init": "node infra/init-db.js"
+  },
+  "devDependencies": {
+    "dotenv": "^17.4.2",
+    "pg": "^8.21.0"
   }
 }

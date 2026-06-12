@@ -1,5 +1,6 @@
-INSERT INTO colleges (id, name, domain, city, state, type) VALUES
+INSERT INTO colleges (id, name, email_domain, city, state, type) VALUES
   ('sggs-nanded', 'Shri Guru Gobind Singhji Institute of Engineering and Technology', 'sggs.ac.in', 'Nanded', 'Maharashtra', 'government'),
+  ('iiitp-pune','Indian Institute of Information Technology pune','cse.iiitp.ac.in','Pune','Maharashtra','government'),
   ('nit-trichy', 'National Institute of Technology Tiruchirappalli', 'nitt.edu', 'Tiruchirappalli', 'Tamil Nadu', 'government'),
   ('nit-warangal', 'National Institute of Technology Warangal', 'nitw.ac.in', 'Warangal', 'Telangana', 'government'),
   ('iit-bombay', 'Indian Institute of Technology Bombay', 'iitb.ac.in', 'Mumbai', 'Maharashtra', 'government'),

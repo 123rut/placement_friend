@@ -1,3 +1,12 @@
+DROP TABLE IF EXISTS company_feedback CASCADE;
+DROP TABLE IF EXISTS interview_experiences CASCADE;
+DROP TABLE IF EXISTS alerts_sent CASCADE;
+DROP TABLE IF EXISTS drives CASCADE;
+DROP TABLE IF EXISTS student_company_targets CASCADE;
+DROP TABLE IF EXISTS companies CASCADE;
+DROP TABLE IF EXISTS students CASCADE;
+DROP TABLE IF EXISTS colleges CASCADE;
+
 CREATE TABLE colleges (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -99,3 +108,18 @@ CREATE TABLE company_feedback (
 CREATE INDEX companies_category_idx ON companies(category);
 CREATE INDEX drives_company_id_idx ON drives(company_id);
 CREATE INDEX students_college_id_idx ON students(college_id);
+
+ALTER TABLE colleges DISABLE ROW LEVEL SECURITY;
+ALTER TABLE companies DISABLE ROW LEVEL SECURITY;
+ALTER TABLE students DISABLE ROW LEVEL SECURITY;
+ALTER TABLE student_company_targets DISABLE ROW LEVEL SECURITY;
+ALTER TABLE drives DISABLE ROW LEVEL SECURITY;
+ALTER TABLE alerts_sent DISABLE ROW LEVEL SECURITY;
+ALTER TABLE interview_experiences DISABLE ROW LEVEL SECURITY;
+ALTER TABLE company_feedback DISABLE ROW LEVEL SECURITY;
+
+-- Grant access to Supabase roles
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO anon, authenticated, service_role;

@@ -98,6 +98,14 @@ export const colleges: College[] = [
     city: "Bhopal",
     state: "Madhya Pradesh",
     type: "government"
+  },
+  {
+    id: "iiitp-pune",
+    name: "Indian Institute of Information Technology Pune",
+    emailDomain: "cse.iiitp.ac.in",
+    city: "Pune",
+    state: "Maharashtra",
+    type: "government"
   }
 ];
 

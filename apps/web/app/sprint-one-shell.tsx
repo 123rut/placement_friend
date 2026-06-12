@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { getCollegeByEmail } from "@piaa/domain";
-import type { College, Company, CompanyCategory, StudentProfile } from "@piaa/domain";
-import { useMemo, useState } from "react";
+import { getCollegeByEmailDb } from "../lib/supabase/colleges";
+import type { College, Company, CompanyCategory } from "@piaa/domain";
+import { useMemo, useState, useEffect } from "react";
 import { branchOptions, categoryLabels } from "../lib/sprint-one";
 
 import type { User } from "@supabase/supabase-js";
@@ -33,13 +33,34 @@ export function SprintOneShell({
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [detectedCollege, setDetectedCollege] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchCollege = async () => {
+      const supabase = createClient();
+      const college = await getCollegeByEmailDb(supabase, email);
+      if (college) {
+        setDetectedCollege({
+          id: college.id,
+          name: college.name,
+          emailDomain: college.email_domain,
+          city: college.city,
+          state: college.state,
+          type: college.type
+        });
+      } else {
+        setDetectedCollege(null);
+      }
+    };
+    fetchCollege();
+  }, [email]);
 
   const handleSaveProfile = async () => {
     setIsSaving(true);
     setMessage("");
     const supabase = createClient();
-    const college = getCollegeByEmail(email);
-    
+    const college = await getCollegeByEmailDb(supabase, email);
+
     if (!college) {
       setMessage("Error: Invalid college email.");
       setIsSaving(false);
@@ -60,13 +81,31 @@ export function SprintOneShell({
 
     if (error) {
       setMessage(`Error: ${error.message}`);
-    } else {
-      setMessage("Profile saved successfully!");
+      setIsSaving(false);
+      return;
     }
-    setIsSaving(false);
-  };
 
-  const detectedCollege = useMemo(() => getCollegeByEmail(email), [email]);
+    // Save tracked companies
+    if (selectedCompanyIds.length > 0) {
+      // Clean up previous choices if any
+      await supabase.from('student_company_targets').delete().eq('student_id', user.id);
+
+      const targets = selectedCompanyIds.map(companyId => ({
+        student_id: user.id,
+        company_id: companyId,
+        notify_via: 'email'
+      }));
+      const { error: targetError } = await supabase.from('student_company_targets').insert(targets);
+      if (targetError) {
+        console.error("Error saving tracked companies:", targetError.message);
+      }
+    }
+
+    setMessage("Profile saved successfully! Redirecting...");
+    setTimeout(() => {
+      window.location.href = "/dashboard";
+    }, 1000);
+  };
 
   const visibleCompanies = useMemo(
     () =>
@@ -210,13 +249,43 @@ export function SprintOneShell({
                 ))}
               </select>
             </label>
+
+            <label className="field" style={{ gridColumn: '1 / -1', marginTop: '8px' }}>
+              <span>Target Companies to Track</span>
+              <div style={{ 
+                maxHeight: '160px', 
+                overflowY: 'auto', 
+                border: '1px solid var(--line)', 
+                borderRadius: 'var(--radius)', 
+                padding: '12px', 
+                background: 'var(--surface-muted)',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: '8px 16px'
+              }}>
+                {companies.map((company) => {
+                  const selected = selectedCompanyIds.includes(company.id);
+                  return (
+                    <label key={company.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleCompany(company.id)}
+                        style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                      />
+                      <span>{company.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </label>
           </div>
 
           <div style={{ marginTop: '16px' }}>
-            <button 
-              onClick={handleSaveProfile} 
+            <button
+              onClick={handleSaveProfile}
               disabled={isSaving}
-              style={{ padding: '8px 16px', background: 'var(--blue-500)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
             >
               {isSaving ? "Saving..." : "Save Profile"}
             </button>

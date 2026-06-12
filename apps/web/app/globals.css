@@ -350,3 +350,50 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+/* Premium Auth Tab Styles */
+.auth-tabs {
+  display: flex;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 4px;
+  margin-bottom: 20px;
+}
+
+.auth-tab {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: 10px 16px;
+  border-radius: calc(var(--radius) - 2px);
+  font-weight: 600;
+  color: var(--muted);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: center;
+}
+
+.auth-tab.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+}
+
+.auth-tab:hover:not(.active) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.btn-toggle {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-weight: 600;
+  padding: 0;
+  margin-left: 6px;
+  text-decoration: underline;
+}
+
+.btn-toggle:hover {
+  color: #173b9e;
+}
