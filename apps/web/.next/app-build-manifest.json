@@ -16,15 +16,20 @@
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/page.js"
     ],
-    "/login/page": [
+    "/companies/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/login/page.js"
+      "static/chunks/app/companies/page.js"
     ],
-    "/profile/page": [
+    "/api/companies/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/profile/page.js"
+      "static/chunks/app/api/companies/route.js"
+    ],
+    "/api/companies/[id]/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/companies/[id]/route.js"
     ]
   }
 }

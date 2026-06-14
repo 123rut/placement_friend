@@ -1,0 +1,17 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[2026-06-14T14:23:07.970Z] EMAIL ALERT
+To:      test-student-sprint3@sggs.ac.in
+Subject: New Opportunity: Software Engineer Intern at Google
+
+Hi Test Student,
+A new placement drive matching your profile has been posted.
+
+Company:  Google
+Role:     Software Engineer Intern
+Type:     internship
+Min CGPA: 8.00
+Branches: Computer Science, Information Technology
+Deadline: N/A
+Apply:    https://careers.google.com/test-sde-1
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
