@@ -71,8 +71,8 @@ export interface DriveDb {
  */
 export async function getActiveCompanies(page = 1, limit = 50, studentId: string | null = null): Promise<CompanyDb[]> {
   const offset = (page - 1) * limit;
-  let queryStr = `SELECT * FROM companies 
-                  WHERE status NOT IN ('paused', 'archived')`;
+  let queryStr = `SELECT c.* FROM companies c
+                  WHERE c.status NOT IN ('paused', 'archived')`;
   const params: any[] = [];
 
   if (studentId) {
