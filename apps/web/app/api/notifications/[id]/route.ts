@@ -4,7 +4,7 @@ import { pool } from "../../../../../worker/src/db";
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -13,7 +13,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const alertId = params.id;
+    const { id: alertId } = await params;
     if (!alertId) {
       return NextResponse.json({ error: "Notification ID required" }, { status: 400 });
     }

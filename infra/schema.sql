@@ -83,14 +83,15 @@ CREATE TABLE drives (
   company_id TEXT NOT NULL REFERENCES companies(id),
   role TEXT NOT NULL,
   type TEXT NOT NULL,
-  eligibility_branches TEXT NOT NULL,
+  allowed_branches TEXT[] NOT NULL DEFAULT '{}',
   min_cgpa NUMERIC(3,2),
   apply_link TEXT NOT NULL,
   drive_date TIMESTAMP,
   deadline TIMESTAMP,
   scraped_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   dedupe_key TEXT NOT NULL UNIQUE,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  source TEXT
 );
 
 CREATE TABLE alerts_sent (
@@ -133,6 +134,7 @@ CREATE TABLE company_feedback (
 CREATE INDEX companies_category_idx ON companies(category);
 CREATE INDEX drives_company_id_idx ON drives(company_id);
 CREATE INDEX students_college_id_idx ON students(college_id);
+CREATE INDEX drives_allowed_branches_idx ON drives USING GIN(allowed_branches);
 
 ALTER TABLE colleges DISABLE ROW LEVEL SECURITY;
 ALTER TABLE companies DISABLE ROW LEVEL SECURITY;

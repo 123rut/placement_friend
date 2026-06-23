@@ -50,3 +50,31 @@ export async function delayBetweenRequests(): Promise<void> {
   const delay = Math.floor(Math.random() * 2000) + 1000; // 1-3 seconds
   await sleep(delay);
 }
+
+let lastGeminiRequestTime = 0;
+const GEMINI_MIN_INTERVAL_MS = Math.ceil(60000 / 14); // ~4286 ms to guarantee at most 14 requests per minute
+
+export async function rateLimitGemini(): Promise<void> {
+  const now = Date.now();
+  const timeSinceLastCall = now - lastGeminiRequestTime;
+  if (timeSinceLastCall < GEMINI_MIN_INTERVAL_MS) {
+    const delay = GEMINI_MIN_INTERVAL_MS - timeSinceLastCall;
+    await sleep(delay);
+  }
+  lastGeminiRequestTime = Date.now();
+}
+
+let lastGroqRequestTime = 0;
+const GROQ_MIN_INTERVAL_MS = 2000; // 2 seconds (max 30 requests per minute)
+
+export async function rateLimitGroq(): Promise<void> {
+  const now = Date.now();
+  const timeSinceLastCall = now - lastGroqRequestTime;
+  if (timeSinceLastCall < GROQ_MIN_INTERVAL_MS) {
+    const delay = GROQ_MIN_INTERVAL_MS - timeSinceLastCall;
+    await sleep(delay);
+  }
+  lastGroqRequestTime = Date.now();
+}
+
+

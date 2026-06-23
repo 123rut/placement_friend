@@ -1,6 +1,7 @@
 import { URL } from "url";
 import * as cheerio from "cheerio";
 import { ScrapedOpportunity } from "../agent";
+import { guessEligibilityFromRole } from "../validator";
 
 export function detectProvider(urlStr: string): boolean {
   try {
@@ -47,7 +48,7 @@ export async function extractJobs(urlStr: string): Promise<ScrapedOpportunity[]>
         if (text && text.length > 5) {
           jobs.push({
             role: text,
-            eligibility: "Computer Science, Information Technology, Electronics",
+            eligibility: guessEligibilityFromRole(text).branches.join(", "),
             deadline: null,
             applyUrl
           });
@@ -61,3 +62,4 @@ export async function extractJobs(urlStr: string): Promise<ScrapedOpportunity[]>
     return [];
   }
 }
+

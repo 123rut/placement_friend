@@ -74,16 +74,25 @@ export async function dispatchNotifications(): Promise<NotifierSummary> {
   }
 
   // 3. Fetch active students & targets
-  const studentsRes = await pool.query(
-    `SELECT s.*, c.name as college_name 
-     FROM students s
-     JOIN colleges c ON s.college_id = c.id`
-  );
+  const loggedInStudentId = process.env.LOGGED_IN_STUDENT_ID || process.env.STUDENT_ID || null;
+  
+  const studentsQuery = loggedInStudentId
+    ? `SELECT s.*, c.name as college_name 
+       FROM students s
+       JOIN colleges c ON s.college_id = c.id
+       WHERE s.id = $1`
+    : `SELECT s.*, c.name as college_name 
+       FROM students s
+       JOIN colleges c ON s.college_id = c.id`;
+
+  const studentsRes = await pool.query(studentsQuery, loggedInStudentId ? [loggedInStudentId] : []);
   const students = studentsRes.rows;
 
-  const targetsRes = await pool.query(
-    `SELECT * FROM student_company_targets`
-  );
+  const targetsQuery = loggedInStudentId
+    ? `SELECT * FROM student_company_targets WHERE student_id = $1`
+    : `SELECT * FROM student_company_targets`;
+
+  const targetsRes = await pool.query(targetsQuery, loggedInStudentId ? [loggedInStudentId] : []);
   const targets = targetsRes.rows;
 
   // Build target and channel preferences map per student
@@ -142,7 +151,7 @@ export async function dispatchNotifications(): Promise<NotifierSummary> {
         sourceUrl: drive.apply_link,
         deadline: drive.deadline ? drive.deadline.toISOString() : null,
         minCgpa: drive.min_cgpa ? parseFloat(drive.min_cgpa) : null,
-        allowedBranches: drive.eligibility_branches ? drive.eligibility_branches.split(",").map((b: string) => b.trim()) : [],
+        allowedBranches: drive.allowed_branches || [],
         allowedBatchYears: [],
         postedAt: drive.scraped_at.toISOString()
       };
@@ -188,8 +197,9 @@ A new placement drive matching your profile has been posted.
 Company:  ${drive.company_name}
 Role:     ${drive.role}
 Type:     ${drive.type}
+Source:   ${drive.source ?? "unknown"}
 Min CGPA: ${drive.min_cgpa ?? "None"}
-Branches: ${drive.eligibility_branches || "All"}
+Branches: ${drive.allowed_branches ? drive.allowed_branches.join(", ") : "All"}
 Deadline: ${drive.deadline ? new Date(drive.deadline).toLocaleDateString() : "N/A"}
 Apply:    ${drive.apply_link}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;

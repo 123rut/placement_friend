@@ -72,7 +72,7 @@ export async function GET() {
         sourceUrl: drive.apply_link,
         deadline: drive.deadline ? drive.deadline.toISOString() : null,
         minCgpa: drive.min_cgpa ? parseFloat(drive.min_cgpa) : null,
-        allowedBranches: drive.eligibility_branches ? drive.eligibility_branches.split(",").map((b: string) => b.trim()) : [],
+        allowedBranches: drive.allowed_branches || [],
         allowedBatchYears: [],
         postedAt: drive.scraped_at.toISOString()
       };

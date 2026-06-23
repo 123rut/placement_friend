@@ -45,23 +45,23 @@ async function runTests() {
     console.log("Seeding test drives...");
     // Drive 1: SDE Intern (CSE, min CGPA 8.0, matching)
     await pool.query(
-      `INSERT INTO drives (id, company_id, role, type, eligibility_branches, min_cgpa, apply_link, dedupe_key, created_at)
-       VALUES ($1, $2, 'Software Engineer Intern', 'internship', 'Computer Science, Information Technology', 8.0, 'https://careers.google.com/test-sde-1', 'dedupe-sde-1', NOW())`,
-      [driveId1, testCompanyId]
+      `INSERT INTO drives (id, company_id, role, type, allowed_branches, min_cgpa, apply_link, dedupe_key, created_at)
+       VALUES ($1, $2, 'Software Engineer Intern', 'internship', $3::text[], 8.0, 'https://careers.google.com/test-sde-1', 'dedupe-sde-1', NOW())`,
+      [driveId1, testCompanyId, ['Computer Science', 'Information Technology']]
     );
 
     // Drive 2: SRE Engineer (CSE, min CGPA 9.0, too high - non-matching)
     await pool.query(
-      `INSERT INTO drives (id, company_id, role, type, eligibility_branches, min_cgpa, apply_link, dedupe_key, created_at)
-       VALUES ($1, $2, 'Site Reliability Engineer', 'full-time', 'Computer Science', 9.0, 'https://careers.google.com/test-sre-2', 'dedupe-sre-2', NOW())`,
-      [driveId2, testCompanyId]
+      `INSERT INTO drives (id, company_id, role, type, allowed_branches, min_cgpa, apply_link, dedupe_key, created_at)
+       VALUES ($1, $2, 'Site Reliability Engineer', 'full-time', $3::text[], 9.0, 'https://careers.google.com/test-sre-2', 'dedupe-sre-2', NOW())`,
+      [driveId2, testCompanyId, ['Computer Science']]
     );
 
     // Drive 3: Hardware Specialist (Mechanical, min CGPA 8.0, branch mismatch - non-matching)
     await pool.query(
-      `INSERT INTO drives (id, company_id, role, type, eligibility_branches, min_cgpa, apply_link, dedupe_key, created_at)
-       VALUES ($1, $2, 'Hardware Specialist', 'full-time', 'Mechanical, Civil', 8.0, 'https://careers.google.com/test-hw-3', 'dedupe-hw-3', NOW())`,
-      [driveId3, testCompanyId]
+      `INSERT INTO drives (id, company_id, role, type, allowed_branches, min_cgpa, apply_link, dedupe_key, created_at)
+       VALUES ($1, $2, 'Hardware Specialist', 'full-time', $3::text[], 8.0, 'https://careers.google.com/test-hw-3', 'dedupe-hw-3', NOW())`,
+      [driveId3, testCompanyId, ['Mechanical', 'Civil']]
     );
 
     // 4. Run Notifier dispatch logic

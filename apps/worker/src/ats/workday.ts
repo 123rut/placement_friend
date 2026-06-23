@@ -1,5 +1,6 @@
 import { URL } from "url";
 import { ScrapedOpportunity } from "../agent";
+import { guessEligibilityFromRole } from "../validator";
 
 export function detectProvider(urlStr: string): boolean {
   try {
@@ -61,7 +62,7 @@ export async function extractJobs(urlStr: string): Promise<ScrapedOpportunity[]>
 
       return {
         role: posting.title,
-        eligibility: "Computer Science, Information Technology, Electronics",
+        eligibility: guessEligibilityFromRole(posting.title).branches.join(", "),
         deadline: null,
         applyUrl
       };
@@ -71,3 +72,4 @@ export async function extractJobs(urlStr: string): Promise<ScrapedOpportunity[]>
     return [];
   }
 }
+

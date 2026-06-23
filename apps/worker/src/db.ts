@@ -54,7 +54,7 @@ export interface DriveDb {
   company_id: string;
   role: string;
   type: string;
-  eligibility_branches: string;
+  allowed_branches: string[];
   min_cgpa: number | null;
   apply_link: string;
   drive_date: Date | null;
@@ -62,21 +62,30 @@ export interface DriveDb {
   scraped_at: Date;
   dedupe_key: string;
   created_at: Date;
+  source: string | null;
 }
 
 /**
  * Fetch active companies for the scraper pipeline (paginated).
  * Excludes 'paused' and 'archived'.
  */
-export async function getActiveCompanies(page = 1, limit = 50): Promise<CompanyDb[]> {
+export async function getActiveCompanies(page = 1, limit = 50, studentId: string | null = null): Promise<CompanyDb[]> {
   const offset = (page - 1) * limit;
-  const result = await pool.query(
-    `SELECT * FROM companies 
-     WHERE status NOT IN ('paused', 'archived') 
-     ORDER BY name ASC 
-     LIMIT $1 OFFSET $2`,
-    [limit, offset]
-  );
+  let queryStr = `SELECT * FROM companies 
+                  WHERE status NOT IN ('paused', 'archived')`;
+  const params: any[] = [];
+
+  if (studentId) {
+    queryStr = `SELECT c.* FROM companies c
+                JOIN student_company_targets t ON c.id = t.company_id
+                WHERE t.student_id = $1 AND c.status NOT IN ('paused', 'archived')`;
+    params.push(studentId);
+  }
+
+  queryStr += ` ORDER BY c.name ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+  params.push(limit, offset);
+
+  const result = await pool.query(queryStr, params);
   return result.rows;
 }
 
@@ -91,20 +100,21 @@ export async function saveDrives(drives: Array<Omit<DriveDb, "scraped_at" | "cre
     await client.query("BEGIN");
     for (const drive of drives) {
       const res = await client.query(
-        `INSERT INTO drives (id, company_id, role, type, eligibility_branches, min_cgpa, apply_link, drive_date, deadline, dedupe_key)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `INSERT INTO drives (id, company_id, role, type, allowed_branches, min_cgpa, apply_link, drive_date, deadline, dedupe_key, source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          ON CONFLICT (dedupe_key) DO NOTHING`,
         [
           drive.id,
           drive.company_id,
           drive.role,
           drive.type,
-          drive.eligibility_branches,
+          drive.allowed_branches,
           drive.min_cgpa,
           drive.apply_link,
           drive.drive_date,
           drive.deadline,
-          drive.dedupe_key
+          drive.dedupe_key,
+          drive.source || null
         ]
       );
       if (res.rowCount && res.rowCount > 0) {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import OpportunityCard, { OpportunityData } from "./OpportunityCard";
 import NotificationBell from "./NotificationBell";
 import PreferencesPanel, { CompanyTarget } from "./PreferencesPanel";
+import { createClient } from "../lib/supabase/client";
 
 const categoryLabels: Record<string, string> = {
   "it-product": "IT Product",
@@ -43,6 +44,12 @@ export default function DashboardClient({
   collegeName
 }: DashboardClientProps) {
   const [opportunities, setOpportunities] = useState<OpportunityData[]>([]);
+  
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  };
   const [targets, setTargets] = useState<CompanyTarget[]>(initialTargets);
   const [loadingOpps, setLoadingOpps] = useState(true);
   const [highlightedDriveId, setHighlightedDriveId] = useState<string | null>(null);
@@ -122,6 +129,25 @@ export default function DashboardClient({
           <Link className="primary-link" href="/profile">
             Edit Profile
           </Link>
+          <button 
+            className="action-btn-danger" 
+            style={{ 
+              padding: "6px 12px", 
+              border: "1px solid var(--warn)", 
+              background: "var(--warn-soft)", 
+              color: "var(--warn)", 
+              borderRadius: "var(--radius)", 
+              fontWeight: 600,
+              fontSize: "0.85rem",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minHeight: "40px"
+            }}
+            onClick={handleLogout}
+          >
+            Logout
+          </button>
         </nav>
       </header>
 

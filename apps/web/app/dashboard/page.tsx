@@ -37,14 +37,20 @@ export default async function DashboardPage() {
   }
 
   // 2. Query student profile with college relationship
-  const { data: student } = await supabase
+  console.log("DASHBOARD - User ID in session:", user.id);
+  const { data: student, error } = await supabase
     .from("students")
     .select("*, colleges(name)")
     .eq("id", user.id)
     .maybeSingle();
+  console.log("DASHBOARD - Query student data:", student);
+  if (error) {
+    console.error("DASHBOARD - Query student error:", error);
+  }
 
   // If student profile is missing, redirect to onboarding form at root
   if (!student) {
+    console.log("DASHBOARD - Profile missing. Redirecting to onboarding...");
     redirect("/");
   }
 

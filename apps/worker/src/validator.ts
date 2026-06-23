@@ -318,3 +318,200 @@ function isGeneralCareersUrl(urlStr: string): boolean {
   } catch {}
   return false;
 }
+
+export type EligibilityResult = {
+  branches: string[];
+  confidence: number;
+};
+
+/**
+ * Normalizes branch name to standard forms used by our system
+ */
+export function normalizeBranch(branch: string): string {
+  const clean = branch.trim().toUpperCase();
+  if (clean === "CSE" || clean === "COMPUTER SCIENCE ENGINEERING" || clean.includes("COMPUTER SCIENCE")) {
+    return "Computer Science";
+  }
+  if (clean === "IT" || clean.includes("INFORMATION TECHNOLOGY")) {
+    return "Information Technology";
+  }
+  if (clean === "ECE" || clean.includes("ELECTRONICS") || clean.includes("COMMUNICATION")) {
+    return "Electronics";
+  }
+  if (clean === "EEE" || clean.includes("ELECTRICAL")) {
+    return "Electrical";
+  }
+  if (clean === "MECH" || clean.includes("MECHANICAL")) {
+    return "Mechanical";
+  }
+  if (clean.includes("CIVIL")) {
+    return "Civil";
+  }
+  if (clean.includes("CHEMICAL")) {
+    return "Chemical";
+  }
+  // Fallback to title case
+  return branch.trim().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+}
+
+/**
+ * Normalizes role name by removing noise keywords and extra spaces
+ */
+export function normalizeRoleName(roleName: string): string {
+  return roleName
+    .replace(/\(.*?\)/g, "") // remove parenthesized details like (Remote), (Hybrid), (Internship)
+    .replace(/\[.*?\]/g, "")
+    .replace(/\b(remote|hybrid|contract|internship program|junior|senior|associate|lead|principal|staff|graduate|fresher|trainee)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Guess eligibility branches from role title and context
+ */
+export function guessEligibilityFromRole(roleName: string, context?: string): EligibilityResult {
+  const normalizedRole = normalizeRoleName(roleName).toLowerCase();
+  const lowerContext = context ? context.toLowerCase() : "";
+
+  // 1. Check exclusions (non-technical roles)
+  const nonTechKeywords = ["hr", "recruiter", "talent acquisition", "marketing", "sales", "finance", "accounting", "legal", "compliance", "writer", "designer", "content writer", "product manager"];
+  if (nonTechKeywords.some(kw => normalizedRole.includes(kw))) {
+    return { branches: [], confidence: 1.0 };
+  }
+
+  // 2. Identify matching branches using keyword lists
+  const csKeywords = [
+    "software", "developer", "programmer", "backend", "frontend", "full stack", "fullstack",
+    "web", "app", "mobile", "ios", "android", "cloud", "devops", "systems engineer",
+    "qa", "test", "automation", "security", "cyber", "data engineer", "data engineering",
+    "machine learning", "artificial intelligence", "deep learning", "ai", "ml", "nlp", "computer vision",
+    "computer science", "information technology", "coding", "algorithm", "full-stack", "back-end", "front-end", "sre", "site reliability"
+  ];
+
+  const dataKeywords = [
+    "data analyst", "analytics", "business intelligence", "bi analyst", "reporting", "tableau", "power bi", "data analysis", "data scientist"
+  ];
+
+  const eceKeywords = [
+    "embedded", "firmware", "hardware", "vlsi", "fpga", "pcb", "circuit", "semiconductor", "asic", "rtl", "microcontroller"
+  ];
+
+  const electricalKeywords = [
+    "electrical", "power system", "control system", "transformer", "grid"
+  ];
+
+  const mechKeywords = [
+    "mechanical", "cad", "thermal", "fluid", "manufacturing", "production", "automotive",
+    "aerospace", "solidworks", "ansys", "hvac", "machine design", "mechatronics"
+  ];
+
+  const civilKeywords = [
+    "civil", "structural", "construction", "geotechnical", "surveying", "transportation",
+    "environmental", "autocad", "site engineer", "infrastructure"
+  ];
+
+  const chemicalKeywords = [
+    "chemical", "polymer", "process engineer", "petroleum", "refinery", "process engineering"
+  ];
+
+  const branchesSet = new Set<string>();
+  let matchedCount = 0;
+
+  if (csKeywords.some(kw => normalizedRole.includes(kw)) && !normalizedRole.includes("embedded")) {
+    branchesSet.add("Computer Science");
+    branchesSet.add("Information Technology");
+    matchedCount++;
+  }
+
+  if (dataKeywords.some(kw => normalizedRole.includes(kw))) {
+    branchesSet.add("Computer Science");
+    branchesSet.add("Information Technology");
+    matchedCount++;
+  }
+
+  if (eceKeywords.some(kw => normalizedRole.includes(kw))) {
+    branchesSet.add("Electronics");
+    matchedCount++;
+  }
+
+  if (electricalKeywords.some(kw => normalizedRole.includes(kw))) {
+    branchesSet.add("Electrical");
+    matchedCount++;
+  }
+
+  if (mechKeywords.some(kw => normalizedRole.includes(kw))) {
+    branchesSet.add("Mechanical");
+    matchedCount++;
+  }
+
+  if (civilKeywords.some(kw => normalizedRole.includes(kw))) {
+    branchesSet.add("Civil");
+    matchedCount++;
+  }
+
+  if (chemicalKeywords.some(kw => normalizedRole.includes(kw))) {
+    branchesSet.add("Chemical");
+    matchedCount++;
+  }
+
+  // 3. Fallback to context scanning if no direct match in role title
+  if (branchesSet.size === 0 && context) {
+    if (lowerContext.includes("computer science") || lowerContext.includes("cse")) {
+      branchesSet.add("Computer Science");
+    }
+    if (lowerContext.includes("information technology") || lowerContext.includes("it")) {
+      branchesSet.add("Information Technology");
+    }
+    if (lowerContext.includes("electronics") || lowerContext.includes("ece")) {
+      branchesSet.add("Electronics");
+    }
+    if (lowerContext.includes("electrical") || lowerContext.includes("eee")) {
+      branchesSet.add("Electrical");
+    }
+    if (lowerContext.includes("mechanical") || lowerContext.includes("mech")) {
+      branchesSet.add("Mechanical");
+    }
+    if (lowerContext.includes("civil")) {
+      branchesSet.add("Civil");
+    }
+    if (lowerContext.includes("chemical")) {
+      branchesSet.add("Chemical");
+    }
+  }
+
+  // 4. Default fallback: If technical but unclassified, default to CS, IT, Electronics
+  if (branchesSet.size === 0) {
+    // If it looks technical (e.g. has "engineer", "technician", "developer", "scientist", "intern")
+    const techWords = ["engineer", "technician", "developer", "scientist", "intern", "analyst", "specialist", "member of technical staff", "mts"];
+    if (techWords.some(w => normalizedRole.includes(w))) {
+      return {
+        branches: ["Computer Science", "Information Technology", "Electronics"],
+        confidence: 0.5
+      };
+    }
+    return { branches: [], confidence: 1.0 }; // Empty for non-tech/unclassified roles
+  }
+
+  // Calculate confidence: single strong classification yields higher confidence
+  const confidence = matchedCount === 1 ? 0.95 : 0.85;
+
+  return {
+    branches: Array.from(branchesSet),
+    confidence
+  };
+}
+
+/**
+ * Checks if a student's branch is eligible given the allowed branches
+ */
+export function isStudentEligible(
+  studentBranch: string | string[],
+  allowedBranches: string[]
+): boolean {
+  const studentBranches = Array.isArray(studentBranch) ? studentBranch : [studentBranch];
+  const normalizedStudent = studentBranches.map(normalizeBranch);
+  const normalizedAllowed = allowedBranches.map(normalizeBranch);
+
+  return normalizedStudent.some(sb => normalizedAllowed.includes(sb));
+}
+

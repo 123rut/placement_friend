@@ -14,14 +14,21 @@ export default async function HomePage() {
   }
 
   // 2. Query students table for profile existence
-  const { data: studentProfile } = await supabase
+  console.log("HOMEPAGE - User ID in session:", user.id);
+  console.log("HOMEPAGE - User email in session:", user.email);
+  const { data: studentProfile, error } = await supabase
     .from("students")
     .select("*")
     .eq("id", user.id)
     .maybeSingle();
+  console.log("HOMEPAGE - Query studentProfile data:", studentProfile);
+  if (error) {
+    console.error("HOMEPAGE - Query studentProfile error:", error);
+  }
 
   // 3. Skip onboarding and go directly to dashboard if profile exists
   if (studentProfile) {
+    console.log("HOMEPAGE - Profile found. Redirecting to dashboard...");
     redirect("/dashboard");
   }
 

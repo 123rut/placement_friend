@@ -17,7 +17,8 @@ import {
   checkDuplicateUrl,
   detectRegionMismatch,
   detectSingleListingUrl,
-  generateDedupeKey
+  generateDedupeKey,
+  isStudentEligible
 } from "./validator";
 import {
   scrapePage,
@@ -65,9 +66,26 @@ export async function executePipeline(): Promise<RunSummary> {
   let page = 1;
   const limit = 50;
   const activeCompanies: CompanyDb[] = [];
+  const loggedInStudentId = process.env.LOGGED_IN_STUDENT_ID || process.env.STUDENT_ID || null;
+  let studentBranch: string | null = null;
+
+  if (loggedInStudentId) {
+    console.log(`Personalized run active. Scraping only for targeted companies of student ID: ${loggedInStudentId}`);
+    try {
+      const studentRes = await pool.query("SELECT branch FROM students WHERE id = $1", [loggedInStudentId]);
+      if (studentRes.rows.length > 0) {
+        studentBranch = studentRes.rows[0].branch;
+        console.log(`Successfully fetched student branch: ${studentBranch}`);
+      } else {
+        console.warn(`Student with ID ${loggedInStudentId} not found in database.`);
+      }
+    } catch (err: any) {
+      console.error(`Error querying student branch:`, err.message || err);
+    }
+  }
 
   while (true) {
-    const batch = await getActiveCompanies(page, limit);
+    const batch = await getActiveCompanies(page, limit, loggedInStudentId);
     if (batch.length === 0) break;
     activeCompanies.push(...batch);
     page++;
@@ -153,7 +171,7 @@ export async function executePipeline(): Promise<RunSummary> {
 
       // 6. Detect login wall or SSO page
       // Two-step page scrape (Cheerio -> Playwright)
-      const { html, usedPlaywright } = await scrapePage(finalUrl);
+      const { html, markdown, usedPlaywright } = await scrapePage(finalUrl);
 
       if (detectLoginWall(html)) {
         console.warn(`Login wall or SSO detected for "${company.name}". Flagging as requires_auth.`);
@@ -169,11 +187,13 @@ export async function executePipeline(): Promise<RunSummary> {
       }
 
       let scrapedJobs: ScrapedOpportunity[] = [];
+      let sourceName = "unknown";
 
       // 8. Extraction logic: Level 1 ATS vs Level 3 AIFallback
       if (atsProvider) {
         console.log(`ATS detected: ${atsProvider} for "${company.name}". Routing to adapter...`);
         summary.atsDetected[atsProvider] = (summary.atsDetected[atsProvider] || 0) + 1;
+        sourceName = atsProvider;
 
         if (atsProvider === "greenhouse") {
           scrapedJobs = await greenhouse.extractJobs(finalUrl);
@@ -188,27 +208,45 @@ export async function executePipeline(): Promise<RunSummary> {
         }
       } else {
         console.log(`No ATS detected for "${company.name}". Using fallback AI/regex extraction...`);
-        scrapedJobs = await extractOpportunities(html, company.id);
+        sourceName = markdown ? "firecrawl" : (usedPlaywright ? "playwright" : "cheerio");
+        scrapedJobs = await extractOpportunities(markdown || html, company.id, studentBranch);
       }
 
       summary.companiesScraped++;
       summary.opportunitiesFound += scrapedJobs.length;
 
+      // Baseline Exclusion: Filter out non-technical roles (branches is empty)
+      let finalJobs = scrapedJobs.filter(job => {
+        const allowed = job.eligibility.split(",").map(b => b.trim()).filter(Boolean);
+        return allowed.length > 0;
+      });
+
+      // Personalized Filtering: If student branch is specified, restrict to eligible ones
+      if (studentBranch) {
+        finalJobs = finalJobs.filter(job => {
+          const allowed = job.eligibility.split(",").map(b => b.trim()).filter(Boolean);
+          return isStudentEligible(studentBranch, allowed);
+        });
+        console.log(`Filtered opportunities for student branch "${studentBranch}": kept ${finalJobs.length} of ${scrapedJobs.length}`);
+      }
+
       // 9. Deduplicate & Save Drives
-      if (scrapedJobs.length > 0) {
-        const drivesToSave = scrapedJobs.map((job) => {
+      if (finalJobs.length > 0) {
+        const drivesToSave = finalJobs.map((job) => {
           const dedupeKey = generateDedupeKey(company.id, job.applyUrl, job.role, null, job.deadline);
+          const allowedBranches = job.eligibility.split(",").map(b => b.trim()).filter(Boolean);
           return {
             id: crypto.randomUUID(),
             company_id: company.id,
             role: job.role,
             type: job.role.toLowerCase().includes("intern") ? "internship" : "full-time",
-            eligibility_branches: job.eligibility,
+            allowed_branches: allowedBranches.length > 0 ? allowedBranches : ["Computer Science", "Information Technology", "Electronics"],
             min_cgpa: null,
             apply_link: job.applyUrl,
             drive_date: null,
             deadline: job.deadline ? new Date(job.deadline) : null,
-            dedupe_key: dedupeKey
+            dedupe_key: dedupeKey,
+            source: sourceName
           };
         });
 
@@ -246,16 +284,30 @@ export async function executePipeline(): Promise<RunSummary> {
 }
 
 async function runEligibilityMatching(): Promise<void> {
-  console.log("\nRunning Student Eligibility Matching...");
+  const loggedInStudentId = process.env.LOGGED_IN_STUDENT_ID || process.env.STUDENT_ID || null;
+  if (loggedInStudentId) {
+    console.log(`Running Student Eligibility Matching only for student ID: ${loggedInStudentId}...`);
+  } else {
+    console.log("\nRunning Student Eligibility Matching for all students...");
+  }
   
   // Fetch students, colleges, targets, and recent drives
-  const studentsRes = await pool.query(
-    `SELECT s.*, c.name as college_name 
-     FROM students s 
-     JOIN colleges c ON s.college_id = c.id`
-  );
+  const studentsQuery = loggedInStudentId
+    ? `SELECT s.*, c.name as college_name 
+       FROM students s 
+       JOIN colleges c ON s.college_id = c.id
+       WHERE s.id = $1`
+    : `SELECT s.*, c.name as college_name 
+       FROM students s 
+       JOIN colleges c ON s.college_id = c.id`;
+
+  const studentsRes = await pool.query(studentsQuery, loggedInStudentId ? [loggedInStudentId] : []);
   
-  const targetsRes = await pool.query(`SELECT * FROM student_company_targets`);
+  const targetsQuery = loggedInStudentId
+    ? `SELECT * FROM student_company_targets WHERE student_id = $1`
+    : `SELECT * FROM student_company_targets`;
+
+  const targetsRes = await pool.query(targetsQuery, loggedInStudentId ? [loggedInStudentId] : []);
   const drivesRes = await pool.query(`SELECT * FROM drives ORDER BY scraped_at DESC LIMIT 100`);
 
   const targetsMap = new Map<string, string[]>();
@@ -289,7 +341,7 @@ async function runEligibilityMatching(): Promise<void> {
     sourceUrl: row.apply_link,
     deadline: row.deadline ? row.deadline.toISOString() : null,
     minCgpa: row.min_cgpa ? parseFloat(row.min_cgpa) : null,
-    allowedBranches: row.eligibility_branches ? row.eligibility_branches.split(",").map((b: string) => b.trim()) : [],
+    allowedBranches: row.allowed_branches || [],
     allowedBatchYears: [],
     postedAt: row.scraped_at.toISOString()
   }));

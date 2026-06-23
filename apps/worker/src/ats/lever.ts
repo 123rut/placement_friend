@@ -1,5 +1,6 @@
 import { URL } from "url";
 import { ScrapedOpportunity } from "../agent";
+import { guessEligibilityFromRole } from "../validator";
 
 export function detectProvider(urlStr: string): boolean {
   try {
@@ -36,9 +37,10 @@ export async function extractJobs(urlStr: string): Promise<ScrapedOpportunity[]>
 
     return postings.map((posting: any) => {
       const location = posting.categories?.location || "Remote";
+      const title = posting.text || posting.title;
       return {
-        role: posting.text || posting.title,
-        eligibility: "Computer Science, Information Technology, Electronics",
+        role: title,
+        eligibility: guessEligibilityFromRole(title).branches.join(", "),
         deadline: null,
         applyUrl: posting.hostedUrl || posting.postingsApplyUrl
       };
@@ -48,3 +50,4 @@ export async function extractJobs(urlStr: string): Promise<ScrapedOpportunity[]>
     return [];
   }
 }
+

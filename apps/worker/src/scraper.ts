@@ -1,4 +1,10 @@
-import { URL } from "url";
+import { URL, fileURLToPath } from "url";
+import path from "path";
+import dotenv from "dotenv";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, "../../../.env.local") });
 
 /**
  * Resolves redirects up to a depth of 5 and classifies them.
@@ -142,8 +148,43 @@ export function detectLoginWall(html: string): boolean {
  */
 export async function scrapePage(urlStr: string): Promise<{
   html: string;
+  markdown?: string;
   usedPlaywright: boolean;
 }> {
+  const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
+  if (firecrawlApiKey) {
+    try {
+      console.log(`Using Firecrawl to scrape URL: ${urlStr}`);
+      const response = await fetch("https://api.firecrawl.dev/v2/scrape", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${firecrawlApiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          url: urlStr,
+          formats: ["html", "markdown"]
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data) {
+          return {
+            html: result.data.html || "",
+            markdown: result.data.markdown || "",
+            usedPlaywright: false
+          };
+        }
+        console.warn(`Firecrawl response reported failure: ${JSON.stringify(result)}`);
+      } else {
+        console.warn(`Firecrawl API returned HTTP ${response.status} for URL: ${urlStr}`);
+      }
+    } catch (error) {
+      console.error("Error scraping page using Firecrawl:", error);
+    }
+    console.log("Falling back to local scrape...");
+  }
   let cheerioHtml = "";
   let success = false;
 
