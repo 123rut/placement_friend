@@ -305,17 +305,131 @@ export function generateDedupeKey(
 /**
  * Helper to identify if a URL is likely a generic job index page rather than a job post.
  */
-function isGeneralCareersUrl(urlStr: string): boolean {
+export function isGeneralCareersUrl(urlStr: string, companyCareersUrl?: string | null): boolean {
   try {
     const parsed = new URL(urlStr);
     const path = parsed.pathname.toLowerCase();
     const query = parsed.search.toLowerCase();
     
-    // If it has pagination or general searches
-    if (query.includes("page=") || query.includes("search=") || path.endsWith("/jobs") || path.endsWith("/careers") || path.endsWith("/results")) {
+    // Normalize paths by removing trailing slashes
+    const normPath = path.replace(/\/$/, "");
+    
+    // If it matches companyCareersUrl exactly (or close to it)
+    if (companyCareersUrl) {
+      try {
+        const compParsed = new URL(companyCareersUrl);
+        const compNorm = compParsed.origin + compParsed.pathname.toLowerCase().replace(/\/$/, "");
+        const urlNorm = parsed.origin + normPath;
+        if (compNorm === urlNorm) {
+          return true;
+        }
+
+        // If the URL is a subpath of the company's careers page
+        // check if it is missing clear job identifiers
+        if (urlNorm.startsWith(compNorm)) {
+          const hasJobId = /\d+/.test(normPath) || 
+                           /[a-f0-9\-]{36}/.test(normPath) || 
+                           normPath.includes("job-") || 
+                           normPath.includes("/job/") || 
+                           normPath.includes("/posting/") ||
+                           query.includes("gh_jid=") || 
+                           query.includes("jobid=") || 
+                           query.includes("req=") || 
+                           query.includes("job_id=");
+          if (!hasJobId) {
+            return true;
+          }
+        }
+      } catch {}
+    }
+    
+    // List of path segments that indicate general portals/categories/landing pages
+    const generalSegments = [
+      "/jobs",
+      "/careers",
+      "/opportunities",
+      "/openings",
+      "/results",
+      "/students",
+      "/graduates",
+      "/where-we-hire",
+      "/key-hiring-areas",
+      "/career-opportunities",
+      "/all-jobs",
+      "/view-all-jobs",
+      "/search-jobs",
+      "/search-careers",
+      "/working-here",
+      "/join-us",
+      "/why-us",
+      "/benefits",
+      "/teams",
+      "/culture",
+      "/departments",
+      "/locations",
+      "/divisions"
+    ];
+    
+    // Check if normalized path matches or ends with any of the general segments
+    if (generalSegments.some(seg => normPath === seg || normPath.endsWith(seg))) {
       return true;
     }
+    
+    // If it has pagination or general search queries
+    if (
+      query.includes("page=") ||
+      query.includes("search=") ||
+      query.includes("keyword=") ||
+      query.includes("q=") ||
+      query.includes("category=") ||
+      query.includes("department=")
+    ) {
+      // But make sure it doesn't have a single job indicator
+      const hasJobId = query.includes("gh_jid=") || query.includes("jobid=") || query.includes("req=") || query.includes("job_id=");
+      if (!hasJobId) {
+        return true;
+      }
+    }
   } catch {}
+  return false;
+}
+
+export function isGenericRoleName(roleName: string): boolean {
+  const lower = roleName.trim().toLowerCase();
+  const genericPhrases = [
+    "students and graduates",
+    "career opportunities",
+    "key hiring areas",
+    "entry-level opportunity",
+    "entry level opportunity",
+    "technology",
+    "all jobs",
+    "search jobs",
+    "join our talent network",
+    "explore opportunities",
+    "learn more",
+    "view jobs",
+    "view all jobs",
+    "working at",
+    "general application",
+    "spontaneous application",
+    "careers",
+    "apply here"
+  ];
+  // If the role name is exactly one of these, or very short and generic
+  if (genericPhrases.some(phrase => lower === phrase || lower.startsWith(phrase + " ") || lower.endsWith(" " + phrase))) {
+    return true;
+  }
+  
+  // Check if roleName is exactly a main department/division name
+  const departments = [
+    "engineering", "sales", "marketing", "finance", "human resources", "hr", "operations",
+    "customer support", "legal", "product management", "design", "it support", "information technology"
+  ];
+  if (departments.some(dept => lower === dept)) {
+    return true;
+  }
+  
   return false;
 }
 

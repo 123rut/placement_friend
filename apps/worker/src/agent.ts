@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import { rateLimitGemini, rateLimitGroq } from "./rateLimiter";
-import { guessEligibilityFromRole, isStudentEligible } from "./validator";
+import { guessEligibilityFromRole, isStudentEligible, isGeneralCareersUrl, isGenericRoleName } from "./validator";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,7 +21,8 @@ export interface ScrapedOpportunity {
 export async function extractOpportunities(
   text: string,
   companyId: string,
-  studentBranch?: string | null
+  studentBranch?: string | null,
+  careersUrl?: string | null
 ): Promise<ScrapedOpportunity[]> {
   const groqApiKey = process.env.GROQ_API_KEY;
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
@@ -30,7 +31,11 @@ export async function extractOpportunities(
   if (groqApiKey) {
     try {
       console.log(`Using Groq API to extract opportunities for: ${companyId}`);
-      let systemInstruction = "You are an expert scraping assistant. Extract open placement and internship opportunities from the provided text/HTML. Return a JSON object with an 'opportunities' key containing an array of opportunities. Each opportunity must have fields: role (string), eligibility (string, comma-separated branches like 'Computer Science, IT'), deadline (ISO 8601 string or null), and applyUrl (string, absolute link). Return ONLY valid JSON.";
+      let systemInstruction = "You are an expert scraping assistant. Extract open specific, individual job postings (placements and internships) from the provided text/HTML. " +
+        "CRITICAL: Do NOT extract broad category pages, divisions, departments, general landing pages, or search pages (e.g. do NOT extract 'Technology', 'Engineering Careers', 'Students and Graduates', 'Sales', 'Entry-Level Opportunity', 'Oracle NetSuite', 'Key hiring areas'). " +
+        "Only extract actual individual job roles (e.g., 'Software Engineer Intern', 'Backend Developer', 'Data Analyst'). " +
+        "Each opportunity must have a direct link (applyUrl) to the specific job details or application page, NOT a general careers index or search page. If no specific individual job postings are listed in the text, return an empty array. " +
+        "Return a JSON object with an 'opportunities' key containing an array of opportunities. Each opportunity must have fields: role (string), eligibility (string, comma-separated branches like 'Computer Science, IT'), deadline (ISO 8601 string or null), and applyUrl (string, absolute link). Return ONLY valid JSON.";
       if (studentBranch) {
         systemInstruction += ` The student belongs to ${studentBranch}. Prioritize and extract only opportunities relevant to ${studentBranch} students. Exclude opportunities clearly intended for unrelated branches (e.g. if the branch is CS, exclude HR, marketing, sales, mechanical, civil, chemical, etc.). If uncertain whether a role is relevant to ${studentBranch}, INCLUDE it.`;
       }
@@ -77,7 +82,11 @@ export async function extractOpportunities(
 
   if (anthropicApiKey) {
     try {
-      const systemInstruction = "You are an expert scraping assistant. Extract open placement and internship opportunities from the provided text/HTML. Return a JSON array of opportunities with fields: role (string), eligibility (string, comma-separated branches like 'Computer Science, IT'), deadline (ISO 8601 string or null), and applyUrl (string, absolute link). Return ONLY the raw JSON array inside a code block, no explanations." + (studentBranch ? ` The student belongs to ${studentBranch}. Prioritize and extract only opportunities relevant to ${studentBranch} students. Exclude opportunities clearly intended for unrelated branches (e.g. if the branch is CS, exclude HR, marketing, sales, mechanical, civil, chemical, etc.). If uncertain whether a role is relevant to ${studentBranch}, INCLUDE it.` : "");
+      const systemInstruction = "You are an expert scraping assistant. Extract open specific, individual job postings (placements and internships) from the provided text/HTML. " +
+        "CRITICAL: Do NOT extract broad category pages, divisions, departments, general landing pages, or search pages (e.g. do NOT extract 'Technology', 'Engineering Careers', 'Students and Graduates', 'Sales', 'Entry-Level Opportunity', 'Oracle NetSuite', 'Key hiring areas'). " +
+        "Only extract actual individual job roles (e.g., 'Software Engineer Intern', 'Backend Developer', 'Data Analyst'). " +
+        "Each opportunity must have a direct link (applyUrl) to the specific job details or application page, NOT a general careers index or search page. If no specific individual job postings are listed in the text, return an empty array. " +
+        "Return a JSON array of opportunities with fields: role (string), eligibility (string, comma-separated branches like 'Computer Science, IT'), deadline (ISO 8601 string or null), and applyUrl (string, absolute link). Return ONLY the raw JSON array inside a code block, no explanations." + (studentBranch ? ` The student belongs to ${studentBranch}. Prioritize and extract only opportunities relevant to ${studentBranch} students. Exclude opportunities clearly intended for unrelated branches (e.g. if the branch is CS, exclude HR, marketing, sales, mechanical, civil, chemical, etc.). If uncertain whether a role is relevant to ${studentBranch}, INCLUDE it.` : "");
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -116,10 +125,11 @@ export async function extractOpportunities(
   if (geminiApiKey) {
     try {
       console.log(`Using Gemini API to extract opportunities for: ${companyId}`);
-      let systemInstruction = "You are an expert scraping assistant. Extract open placement and internship opportunities from the provided text/HTML. Return a JSON array of opportunities with fields: role (string), eligibility (string, comma-separated branches like 'Computer Science, IT'), deadline (ISO 8601 string or null), and applyUrl (string, absolute link). Return ONLY the raw JSON array.";
-      if (studentBranch) {
-        systemInstruction += ` The student belongs to ${studentBranch}. Prioritize and extract only opportunities relevant to ${studentBranch} students. Exclude opportunities clearly intended for unrelated branches (e.g. if the branch is CS, exclude HR, marketing, sales, mechanical, civil, chemical, etc.). If uncertain whether a role is relevant to ${studentBranch}, INCLUDE it.`;
-      }
+      let systemInstruction = "You are an expert scraping assistant. Extract open specific, individual job postings (placements and internships) from the provided text/HTML. " +
+        "CRITICAL: Do NOT extract broad category pages, divisions, departments, general landing pages, or search pages (e.g. do NOT extract 'Technology', 'Engineering Careers', 'Students and Graduates', 'Sales', 'Entry-Level Opportunity', 'Oracle NetSuite', 'Key hiring areas'). " +
+        "Only extract actual individual job roles (e.g., 'Software Engineer Intern', 'Backend Developer', 'Data Analyst'). " +
+        "Each opportunity must have a direct link (applyUrl) to the specific job details or application page, NOT a general careers index or search page. If no specific individual job postings are listed in the text, return an empty array. " +
+        "Return a JSON array of opportunities with fields: role (string), eligibility (string, comma-separated branches like 'Computer Science, IT'), deadline (ISO 8601 string or null), and applyUrl (string, absolute link). Return ONLY the raw JSON array.";
       const prompt = `Extract opportunities for company "${companyId}" from this text:\n\n${text.slice(0, 50000)}`;
 
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
@@ -161,10 +171,15 @@ export async function extractOpportunities(
   }
 
   // Fallback to local regex-based parsing
-  return regexExtractOpportunities(text, companyId, studentBranch);
+  return regexExtractOpportunities(text, companyId, studentBranch, careersUrl);
 }
 
-function regexExtractOpportunities(text: string, companyId: string, studentBranch?: string | null): ScrapedOpportunity[] {
+function regexExtractOpportunities(
+  text: string,
+  companyId: string,
+  studentBranch?: string | null,
+  careersUrl?: string | null
+): ScrapedOpportunity[] {
   const opportunities: ScrapedOpportunity[] = [];
   const linkRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let match;
@@ -196,11 +211,17 @@ function regexExtractOpportunities(text: string, companyId: string, studentBranc
     ) {
       let applyUrl = href;
       if (href.startsWith("/")) {
-        applyUrl = `https://careers.${companyId}.com` + href;
+        const base = careersUrl ? new URL(careersUrl).origin : `https://careers.${companyId}.com`;
+        applyUrl = base + href;
       }
 
       if (visited.has(applyUrl)) continue;
       visited.add(applyUrl);
+
+      // Filter out general career landing pages or generic role names
+      if (isGeneralCareersUrl(applyUrl, careersUrl) || isGenericRoleName(linkText)) {
+        continue;
+      }
 
       const context = text.slice(Math.max(0, match.index - 500), Math.min(text.length, match.index + 500));
       const eligibility = guessEligibility(linkText, context);
@@ -219,29 +240,6 @@ function regexExtractOpportunities(text: string, companyId: string, studentBranc
         eligibility,
         deadline,
         applyUrl
-      });
-    }
-  }
-
-  // If no opportunities are parsed from elements, return a mock default for safety
-  if (opportunities.length === 0) {
-    const mockRole = "Software Engineering Intern";
-    const mockEligibility = "Computer Science, Information Technology, Electronics";
-    
-    let shouldAddMock = true;
-    if (studentBranch) {
-      const allowedBranches = mockEligibility.split(",").map(b => b.trim());
-      if (!isStudentEligible(studentBranch, allowedBranches)) {
-        shouldAddMock = false;
-      }
-    }
-
-    if (shouldAddMock) {
-      opportunities.push({
-        role: mockRole,
-        eligibility: mockEligibility,
-        deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        applyUrl: `https://careers.${companyId}.com/jobs/apply-internship`
       });
     }
   }

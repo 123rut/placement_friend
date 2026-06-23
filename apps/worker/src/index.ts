@@ -18,7 +18,9 @@ import {
   detectRegionMismatch,
   detectSingleListingUrl,
   generateDedupeKey,
-  isStudentEligible
+  isStudentEligible,
+  isGeneralCareersUrl,
+  isGenericRoleName
 } from "./validator";
 import {
   scrapePage,
@@ -209,16 +211,19 @@ export async function executePipeline(): Promise<RunSummary> {
       } else {
         console.log(`No ATS detected for "${company.name}". Using fallback AI/regex extraction...`);
         sourceName = markdown ? "firecrawl" : (usedPlaywright ? "playwright" : "cheerio");
-        scrapedJobs = await extractOpportunities(markdown || html, company.id, studentBranch);
+        scrapedJobs = await extractOpportunities(markdown || html, company.id, studentBranch, careersUrl);
       }
 
       summary.companiesScraped++;
       summary.opportunitiesFound += scrapedJobs.length;
 
-      // Baseline Exclusion: Filter out non-technical roles (branches is empty)
+      // Baseline Exclusion: Filter out non-technical roles, generic role names, and general career URLs
       let finalJobs = scrapedJobs.filter(job => {
         const allowed = job.eligibility.split(",").map(b => b.trim()).filter(Boolean);
-        return allowed.length > 0;
+        const isTech = allowed.length > 0;
+        const isGeneric = isGenericRoleName(job.role);
+        const isGeneralUrl = isGeneralCareersUrl(job.applyUrl, careersUrl);
+        return isTech && !isGeneric && !isGeneralUrl;
       });
 
       // Personalized Filtering: If student branch is specified, restrict to eligible ones
