@@ -74,8 +74,37 @@ export async function dispatchNotifications(): Promise<NotifierSummary> {
   }
 
   // 3. Fetch active students & targets
-  const loggedInStudentId = process.env.LOGGED_IN_STUDENT_ID || process.env.STUDENT_ID || null;
-  
+  // Resolve student ID — same 3-layer logic as the pipeline worker
+  let loggedInStudentId = process.env.LOGGED_IN_STUDENT_ID || process.env.STUDENT_ID || null;
+
+  if (!loggedInStudentId) {
+    try {
+      const stateRes = await pool.query(
+        "SELECT value FROM system_state WHERE key = 'active_student_id'"
+      );
+      if (stateRes.rows.length > 0) {
+        loggedInStudentId = stateRes.rows[0].value;
+        console.log(`[Notifier] Auto-detected student ID from system_state: ${loggedInStudentId}`);
+      }
+    } catch (err: any) {
+      console.warn("[Notifier] Could not read active_student_id from system_state:", err.message);
+    }
+  }
+
+  if (!loggedInStudentId) {
+    try {
+      const targetRes = await pool.query(
+        `SELECT student_id FROM student_company_targets GROUP BY student_id ORDER BY COUNT(*) DESC LIMIT 1`
+      );
+      if (targetRes.rows.length > 0) {
+        loggedInStudentId = targetRes.rows[0].student_id;
+        console.log(`[Notifier] Auto-detected student ID from targets: ${loggedInStudentId}`);
+      }
+    } catch (err: any) {
+      console.warn("[Notifier] Could not auto-detect student from targets:", err.message);
+    }
+  }
+
   const studentsQuery = loggedInStudentId
     ? `SELECT s.*, c.name as college_name 
        FROM students s
@@ -94,6 +123,7 @@ export async function dispatchNotifications(): Promise<NotifierSummary> {
 
   const targetsRes = await pool.query(targetsQuery, loggedInStudentId ? [loggedInStudentId] : []);
   const targets = targetsRes.rows;
+
 
   // Build target and channel preferences map per student
   const studentTargetsMap = new Map<string, string[]>();

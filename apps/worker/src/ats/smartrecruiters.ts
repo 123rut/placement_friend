@@ -1,6 +1,7 @@
 import { URL } from "url";
 import { ScrapedOpportunity } from "../agent";
 import { guessEligibilityFromRole } from "../validator";
+import { fetchWithTimeout } from "../fetchWithTimeout";
 
 export function detectProvider(urlStr: string): boolean {
   try {
@@ -23,7 +24,7 @@ export async function extractJobs(urlStr: string): Promise<ScrapedOpportunity[]>
     }
 
     const apiUrl = `https://api.smartrecruiters.com/v1/companies/${companyId}/postings`;
-    const response = await fetch(apiUrl);
+    const response = await fetchWithTimeout(apiUrl, { timeout: 10000 });
 
     if (!response.ok) {
       console.warn(`SmartRecruiters API returned HTTP ${response.status} for company ${companyId}`);

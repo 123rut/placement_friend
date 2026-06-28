@@ -1,44 +1,72 @@
-# Placement & Internship Alert Agent
+# CareerPilot AI
 
-Placement & Internship Alert Agent is a SaaS platform that helps students discover placement drives and internships before deadlines pass. The MVP centralizes company career-page tracking, eligibility matching, and notifications in a mobile-first student workflow.
+CareerPilot AI is an AI-powered career agent for software engineers. It combines ATS sync pipelines, resume parsing, semantic job search, and agent-style guidance so a user can upload a resume and get ranked opportunities with concrete next steps.
 
-## Current Status
+## What is in this repo
 
-Sprint 1 is implemented in this repo:
+- `apps/api`: NestJS API for resume parsing, job search, matching, chat, and sync triggers
+- `apps/worker`: ATS adapters, company registry, sync helpers, and job ingestion foundations
+- `apps/web`: Next.js frontend shells and lightweight app routes
+- `infra`: PostgreSQL and Supabase SQL, including the CareerPilot migration
+- `packages/domain`: shared domain helpers from the earlier foundation work
 
-- College-email-first onboarding with domain-to-college mapping
-- Student profile setup for branch, CGPA, and batch year
-- Top 100 seeded companies with category, eligibility, and package metadata
-- PRD-aligned SQL schema and seed files for Supabase/PostgreSQL foundations
-- Foundation dashboard and API routes for colleges and companies
+## CareerPilot MVP slice
 
-Later sprint work such as scraping, drive ingestion, and alerts remains intentionally out of scope in the current web experience.
+The current backend is aligned around this first vertical slice:
 
-## Full MVP Scope
+1. Upload a PDF or DOCX resume to `/api/resume/parse`
+2. Sync ATS jobs into the normalized `jobs` table through `/api/worker/sync`
+3. Search cached jobs with `/api/jobs/search`
+4. Rank fit with `/api/jobs/match`
+5. Ask the planner at `/api/agent/chat`
 
-- Authentication with college email
-- Student profile management
-- Company tracking
-- Opportunity scraping and deduplication
-- Eligibility matching
-- Timely notifications
-- Upcoming drives dashboard
+When `GROQ_API_KEY` and `GEMINI_API_KEY` are configured, the API uses LLM extraction plus embeddings. Without them, the API now falls back to deterministic parsing and heuristic matching so local development still works.
 
-## Repository Layout
+## Database setup
 
-- `apps/web`: student-facing Next.js application and lightweight API routes
-- `apps/worker`: scraping, normalization, matching, and notification orchestration skeleton
-- `packages/domain`: shared domain types, rules, and helpers
-- `docs`: product and architecture notes
-- `infra`: SQL schema for the first release
+Run the base schema first, then the CareerPilot migration:
 
-## Suggested Next Steps
+```bash
+node infra/init-db.js
+```
 
-1. Wire the Sprint 1 schema into a real Supabase project.
-2. Replace the mock onboarding state with Supabase Auth and persisted student records.
-3. Load `infra/seed_colleges.sql` and `infra/seed_companies.sql` into the database.
-4. Begin Sprint 2 with real career-page discovery and drive ingestion.
+Or apply these manually in Supabase/Postgres:
 
-## Product Direction
+1. `infra/schema.sql`
+2. `infra/migrate-careerpilot.sql`
 
-The current scaffold intentionally favors reliability, low notification noise, and clean ownership boundaries between scraping, matching, and delivery. Advanced social, recommendation, and community features are deferred until the MVP is stable.
+The migration adds:
+
+- ATS metadata on `companies`
+- `jobs`
+- `candidate_profiles`
+- `job_matches`
+- `conversations`
+- `sync_logs`
+- `pgvector` support
+
+## Key API routes
+
+- `POST /api/resume/parse`
+- `GET /api/resume/:userId`
+- `POST /api/jobs/search`
+- `POST /api/jobs/match`
+- `GET /api/jobs/matches/:userId`
+- `POST /api/agent/chat`
+- `GET /api/agent/conversations/:userId`
+- `POST /api/worker/sync`
+- `POST /api/worker/sync/:companyId`
+- `GET /api/worker/sync/logs`
+
+## Product direction
+
+CareerPilot AI is the product. ATS sync is only one input into the AI career workflow; the primary experience is resume-aware guidance, job matching, and application planning.
+
+The project currently verifies with:
+
+```bash
+npm run typecheck
+npm run build
+npm --workspace api test -- --runInBand
+npm run validate:companies:metadata
+```

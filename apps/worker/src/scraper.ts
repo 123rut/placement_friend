@@ -1,6 +1,7 @@
 import { URL, fileURLToPath } from "url";
 import path from "path";
 import dotenv from "dotenv";
+import { fetchWithTimeout } from "./fetchWithTimeout";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,12 +26,13 @@ export async function detectRedirect(urlStr: string): Promise<{
   while (redirectDepth < maxDepth) {
     visited.add(currentUrl);
     try {
-      const response = await fetch(currentUrl, {
+      const response = await fetchWithTimeout(currentUrl, {
         method: "GET",
         redirect: "manual",
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
+        },
+        timeout: 10000
       });
 
       if ([301, 302, 303, 307, 308].includes(response.status)) {
@@ -82,6 +84,13 @@ export function getAtsProviderFromUrl(urlStr: string): string | null {
     if (host.includes("myworkdayjobs.com")) return "workday";
     if (host.includes("taleo.net")) return "taleo";
     if (host.includes("smartrecruiters.com")) return "smartrecruiters";
+    if (host.includes("amazon.jobs")) return "amazon";
+
+    // Custom Greenhouse domains
+    const customGreenhouseDomains = ["atlassian.com", "gojek.io", "swiggy.com", "cred.club", "meesho.io"];
+    if (customGreenhouseDomains.some(domain => host === domain || host.endsWith("." + domain))) {
+      return "greenhouse";
+    }
   } catch {}
   return null;
 }
@@ -99,6 +108,7 @@ export function detectATS(html: string, urlStr: string): string | null {
   if (lowerHtml.includes("myworkdayjobs.com") || lowerHtml.includes("workday")) return "workday";
   if (lowerHtml.includes("taleo.net") || lowerHtml.includes("taleo")) return "taleo";
   if (lowerHtml.includes("smartrecruiters.com")) return "smartrecruiters";
+  if (lowerHtml.includes("amazon.jobs")) return "amazon";
 
   return null;
 }
@@ -155,7 +165,7 @@ export async function scrapePage(urlStr: string): Promise<{
   if (firecrawlApiKey) {
     try {
       console.log(`Using Firecrawl to scrape URL: ${urlStr}`);
-      const response = await fetch("https://api.firecrawl.dev/v2/scrape", {
+      const response = await fetchWithTimeout("https://api.firecrawl.dev/v2/scrape", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${firecrawlApiKey}`,
@@ -164,7 +174,8 @@ export async function scrapePage(urlStr: string): Promise<{
         body: JSON.stringify({
           url: urlStr,
           formats: ["html", "markdown"]
-        })
+        }),
+        timeout: 20000
       });
 
       if (response.ok) {
@@ -189,11 +200,12 @@ export async function scrapePage(urlStr: string): Promise<{
   let success = false;
 
   try {
-    const response = await fetch(urlStr, {
+    const response = await fetchWithTimeout(urlStr, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-      }
+      },
+      timeout: 10000
     });
     if (response.ok) {
       cheerioHtml = await response.text();

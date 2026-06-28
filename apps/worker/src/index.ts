@@ -39,6 +39,7 @@ import * as lever from "./ats/lever";
 import * as workday from "./ats/workday";
 import * as taleo from "./ats/taleo";
 import * as smartrecruiters from "./ats/smartrecruiters";
+import * as amazon from "./ats/amazon";
 
 import { matchStudentToOpportunity, StudentProfile, Opportunity } from "@piaa/domain";
 import { pool } from "./db";
@@ -68,8 +69,55 @@ export async function executePipeline(): Promise<RunSummary> {
   let page = 1;
   const limit = 50;
   const activeCompanies: CompanyDb[] = [];
-  const loggedInStudentId = process.env.LOGGED_IN_STUDENT_ID || process.env.STUDENT_ID || null;
+
+  // Resolve student ID — 3 layers:
+  // 1. Env var (manual override)
+  // 2. system_state table (written when student saves profile via web app)
+  // 3. Auto-detect from student_company_targets (if only one student has saved companies)
+  let loggedInStudentId = process.env.LOGGED_IN_STUDENT_ID || process.env.STUDENT_ID || null;
+
+  if (!loggedInStudentId) {
+    try {
+      const stateRes = await pool.query(
+        "SELECT value FROM system_state WHERE key = 'active_student_id'"
+      );
+      if (stateRes.rows.length > 0) {
+        loggedInStudentId = stateRes.rows[0].value;
+        console.log(`[Auto-detected via system_state] Student ID: ${loggedInStudentId}`);
+      }
+    } catch (err: any) {
+      console.warn("Could not read active_student_id from system_state:", err.message || err);
+    }
+  }
+
+  // Fallback: find any student who has saved company targets
+  if (!loggedInStudentId) {
+    try {
+      const targetRes = await pool.query(
+        `SELECT student_id, COUNT(*) as company_count
+         FROM student_company_targets
+         GROUP BY student_id
+         ORDER BY company_count DESC
+         LIMIT 1`
+      );
+      if (targetRes.rows.length > 0) {
+        loggedInStudentId = targetRes.rows[0].student_id;
+        console.log(`[Auto-detected via targets] Student ID: ${loggedInStudentId} (has ${targetRes.rows[0].company_count} saved companies)`);
+        // Also persist this to system_state for next run
+        await pool.query(
+          `INSERT INTO system_state (key, value, updated_at)
+           VALUES ('active_student_id', $1, NOW())
+           ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
+          [loggedInStudentId]
+        );
+      }
+    } catch (err: any) {
+      console.warn("Could not auto-detect student from targets:", err.message || err);
+    }
+  }
+
   let studentBranch: string | null = null;
+
 
   if (loggedInStudentId) {
     console.log(`Personalized run active. Scraping only for targeted companies of student ID: ${loggedInStudentId}`);
@@ -80,10 +128,15 @@ export async function executePipeline(): Promise<RunSummary> {
         console.log(`Successfully fetched student branch: ${studentBranch}`);
       } else {
         console.warn(`Student with ID ${loggedInStudentId} not found in database.`);
+        loggedInStudentId = null; // Reset to avoid filtering on a non-existent student
       }
     } catch (err: any) {
       console.error(`Error querying student branch:`, err.message || err);
     }
+  }
+
+  if (!loggedInStudentId) {
+    console.log("No active student detected. Running global scrape for all active companies.");
   }
 
   while (true) {
@@ -94,6 +147,7 @@ export async function executePipeline(): Promise<RunSummary> {
   }
 
   console.log(`Fetched ${activeCompanies.length} active companies to process.`);
+
 
   for (const company of activeCompanies) {
     let careersUrl = company.careers_url;
@@ -202,11 +256,13 @@ export async function executePipeline(): Promise<RunSummary> {
         } else if (atsProvider === "lever") {
           scrapedJobs = await lever.extractJobs(finalUrl);
         } else if (atsProvider === "workday") {
-          scrapedJobs = await workday.extractJobs(finalUrl);
+          scrapedJobs = await workday.extractJobs(finalUrl, html);
         } else if (atsProvider === "taleo") {
           scrapedJobs = await taleo.extractJobs(finalUrl);
         } else if (atsProvider === "smartrecruiters") {
           scrapedJobs = await smartrecruiters.extractJobs(finalUrl);
+        } else if (atsProvider === "amazon") {
+          scrapedJobs = await amazon.extractJobs(finalUrl);
         }
       } else {
         console.log(`No ATS detected for "${company.name}". Using fallback AI/regex extraction...`);

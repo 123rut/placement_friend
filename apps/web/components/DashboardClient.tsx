@@ -1,20 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import OpportunityCard, { OpportunityData } from "./OpportunityCard";
 import NotificationBell from "./NotificationBell";
 import PreferencesPanel, { CompanyTarget } from "./PreferencesPanel";
+import CareerPilotPanel from "./CareerPilotPanel";
 import { createClient } from "../lib/supabase/client";
-
-const categoryLabels: Record<string, string> = {
-  "it-product": "IT Product",
-  "it-service": "IT Service",
-  core: "Core",
-  consulting: "Consulting",
-  bfsi: "BFSI",
-  startup: "Startup"
-};
 
 interface Student {
   id: string;
@@ -41,21 +33,73 @@ export default function DashboardClient({
   initialTargets,
   eligibleCount,
   categoryCounts,
-  collegeName
+  collegeName,
 }: DashboardClientProps) {
   const [opportunities, setOpportunities] = useState<OpportunityData[]>([]);
-  
+  const [targets] = useState<CompanyTarget[]>(initialTargets);
+  const [loadingOpps, setLoadingOpps] = useState(true);
+  const [highlightedDriveId, setHighlightedDriveId] = useState<string | null>(null);
+  const driveRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+
+  const firstName = student.full_name.split(" ")[0];
+  const careerReadiness = useMemo(() => {
+    const cgpa = Number.parseFloat(student.cgpa);
+    if (Number.isNaN(cgpa)) {
+      return "Profile seeded";
+    }
+    if (cgpa >= 8.5) {
+      return "High-fit shortlist";
+    }
+    if (cgpa >= 7.5) {
+      return "Growth mode";
+    }
+    return "Foundation mode";
+  }, [student.cgpa]);
+
+  const focusNote = useMemo(() => {
+    const branch = student.branch.toLowerCase();
+    if (branch.includes("computer")) {
+      return "Push backend and systems roles first. Your profile is already aligned with the strongest software tracks.";
+    }
+    if (branch.includes("electronics")) {
+      return "Blend software roles with platform and systems openings to widen the match surface.";
+    }
+    return "Use the watchlist to bias toward flexible employers, then tighten the shortlist with profile edits.";
+  }, [student.branch]);
+
+  const matchDensity = useMemo(() => {
+    if (targets.length === 0) {
+      return "No watchlist yet";
+    }
+    const ratio = eligibleCount / targets.length;
+    if (ratio >= 2) {
+      return "Very broad";
+    }
+    if (ratio >= 1) {
+      return "Balanced";
+    }
+    return "Selective";
+  }, [eligibleCount, targets.length]);
+
+  const topCategories = useMemo(
+    () => categoryCounts.filter((item) => item.count > 0).sort((a, b) => b.count - a.count).slice(0, 3),
+    [categoryCounts],
+  );
+
+  const quickStats = useMemo(
+    () => [
+      { label: "Eligible companies", value: String(eligibleCount) },
+      { label: "Tracked companies", value: String(targets.length) },
+      { label: "Search surface", value: matchDensity },
+    ],
+    [eligibleCount, matchDensity, targets.length],
+  );
+
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
     window.location.href = "/login";
   };
-  const [targets, setTargets] = useState<CompanyTarget[]>(initialTargets);
-  const [loadingOpps, setLoadingOpps] = useState(true);
-  const [highlightedDriveId, setHighlightedDriveId] = useState<string | null>(null);
-
-  // References for scrolling to highlighted card
-  const driveRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   const fetchOpportunities = async () => {
     setLoadingOpps(true);
@@ -72,136 +116,141 @@ export default function DashboardClient({
     }
   };
 
-  const fetchTargets = async () => {
-    try {
-      const query = new URLSearchParams({ page: "1", limit: "100" });
-      const res = await fetch(`/api/companies?${query}`);
-      if (res.ok) {
-        // We can reload the page or fetch specific targets
-        // For simplicity, we just reload window or fetch targets again.
-        // Let's call /api/opportunities again to update list
-        fetchOpportunities();
-      }
-    } catch (err) {
-      console.error("Failed to fetch targets:", err);
-    }
-  };
-
   useEffect(() => {
     fetchOpportunities();
   }, []);
 
   const handleSelectDrive = (driveId: string) => {
     setHighlightedDriveId(driveId);
-    
-    // Smooth scroll to the matching opportunity card
     setTimeout(() => {
       const cardEl = driveRefs.current[driveId];
       if (cardEl) {
         cardEl.scrollIntoView({ behavior: "smooth", block: "center" });
-        // Add a temporary glow effect
-        cardEl.style.boxShadow = "0 0 15px var(--accent)";
-        setTimeout(() => {
-          cardEl.style.boxShadow = "var(--shadow)";
-        }, 3000);
       }
     }, 100);
   };
 
-  const handleRefreshTargets = () => {
-    // Refresh opportunities feed when alerts preferences change
-    fetchOpportunities();
-  };
-
   return (
-    <main className="app-shell">
-      <header className="topbar" style={{ alignItems: "center" }}>
+    <main className="app-shell careerpilot-shell">
+      <header className="topbar">
         <div>
-          <div className="topbar-kicker">Student Workspace</div>
-          <h1 style={{ margin: "4px 0 0" }}>{student.full_name.split(" ")[0]}'s Sprint 3 Workspace</h1>
+          <div className="topbar-kicker">CareerPilot AI</div>
+          <h1>{firstName}&apos;s career command center</h1>
+          <p className="hero-subtle">
+            Resume-aware job discovery, watchlist signals, and next-step guidance in one workspace.
+          </p>
         </div>
-        <nav className="topbar-actions" style={{ alignItems: "center" }}>
+        <nav className="topbar-actions">
           <span className="pill">{collegeName}</span>
+          <span className="pill">{careerReadiness}</span>
           <NotificationBell onSelectDrive={handleSelectDrive} />
-          <Link className="primary-link" style={{ background: "var(--accent-soft)", color: "var(--accent)", border: "1px solid var(--line)" }} href="/companies">
-            Manage Companies
+          <Link className="primary-link ghost-link" href="/companies">
+            ATS Registry
           </Link>
           <Link className="primary-link" href="/profile">
-            Edit Profile
+            Tune Profile
           </Link>
-          <button 
-            className="action-btn-danger" 
-            style={{ 
-              padding: "6px 12px", 
-              border: "1px solid var(--warn)", 
-              background: "var(--warn-soft)", 
-              color: "var(--warn)", 
-              borderRadius: "var(--radius)", 
-              fontWeight: 600,
-              fontSize: "0.85rem",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              minHeight: "40px"
-            }}
-            onClick={handleLogout}
-          >
+          <button className="action-btn-danger" onClick={handleLogout}>
             Logout
           </button>
         </nav>
       </header>
 
-      {/* Metrics Section */}
-      <section className="workspace-section metrics-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+      <section className="workspace-section">
+        <div className="hero-board">
+          <article className="hero-card">
+            <div className="section-label">Agent view</div>
+            <h2>A cleaner job search workspace built around your profile.</h2>
+            <p className="hero-copy">{focusNote}</p>
+            <div className="hero-stat-row">
+              {quickStats.map((item) => (
+                <div key={item.label} className="hero-stat">
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="spotlight-card">
+            <div className="section-label">Profile snapshot</div>
+            <h3>{student.branch} profile, Batch {student.batch_year}</h3>
+            <div className="spotlight-metrics">
+              <div>
+                <span className="summary-label">College</span>
+                <div className="summary-value">{collegeName}</div>
+              </div>
+              <div>
+                <span className="summary-label">CGPA</span>
+                <div className="summary-value">{Number.parseFloat(student.cgpa).toFixed(2)}</div>
+              </div>
+              <div>
+                <span className="summary-label">Readiness</span>
+                <div className="summary-value">{careerReadiness}</div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section className="workspace-section metrics-grid career-metrics">
+        <article className="metric-panel">
+          <span className="metric-label">Eligible companies</span>
+          <strong>{eligibleCount}</strong>
+          <span className="metric-footnote">Current fit across the seeded watchlist</span>
+        </article>
+        <article className="metric-panel">
+          <span className="metric-label">Tracked companies</span>
+          <strong>{targets.length}</strong>
+          <span className="metric-footnote">Active watchlist size</span>
+        </article>
         <article className="metric-panel">
           <span className="metric-label">Mapped colleges</span>
           <strong>{collegesCount}</strong>
+          <span className="metric-footnote">Verification coverage</span>
         </article>
         <article className="metric-panel">
-          <span className="metric-label">Seeded companies</span>
-          <strong>{targets.length}</strong>
-        </article>
-        <article className="metric-panel">
-          <span className="metric-label">Profile-ready companies</span>
-          <strong>{eligibleCount}</strong>
+          <span className="metric-label">Watchlist density</span>
+          <strong>{matchDensity}</strong>
+          <span className="metric-footnote">How broad your current search surface is</span>
         </article>
       </section>
 
-      {/* Dashboard Content split into panels */}
-      <section className="workspace-section dashboard-layout" style={{ gridTemplateColumns: "1.4fr 1fr", alignItems: "start" }}>
-        {/* Left Column: Opportunities Feed & Profile */}
-        <div style={{ display: "grid", gap: "20px" }}>
-          
-          {/* Opportunities Feed Panel */}
+      <section className="workspace-section dashboard-layout career-dashboard">
+        <div className="dashboard-main-stack">
+          <CareerPilotPanel onSyncComplete={fetchOpportunities} />
+
           <article className="panel">
-            <div className="panel-header" style={{ borderBottom: "1px solid var(--line)", paddingBottom: "12px", marginBottom: "16px" }}>
+            <div className="panel-header">
               <div>
-                <div className="section-label">Matched Drives</div>
-                <h2 style={{ fontSize: "1.3rem", margin: "4px 0 0" }}>Your Placement & Internship Feed</h2>
+                <div className="section-label">Recommended roles</div>
+                <h2>Jobs surfacing from your current watchlist</h2>
               </div>
+              {highlightedDriveId ? <span className="status-good">Notification opened</span> : null}
             </div>
 
             {loadingOpps ? (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
-                {[1, 2].map(i => (
-                  <div key={i} className="panel" style={{ height: "200px", background: "var(--surface-muted)", animation: "pulse 1.5s infinite" }} />
+              <div className="opportunity-grid">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="loading-card" />
                 ))}
               </div>
             ) : opportunities.length === 0 ? (
-              <div style={{ padding: "40px 20px", textAlign: "center" }}>
-                <span style={{ fontSize: "2rem" }}>🔍</span>
-                <h3 style={{ margin: "12px 0 4px", fontSize: "1rem", color: "var(--text)" }}>No Matching Opportunities</h3>
-                <p style={{ color: "var(--muted)", margin: 0, fontSize: "0.88rem" }}>
-                  No matching opportunities found right now. Target more companies or check back after the next scrape cycle.
+              <div className="empty-state">
+                <h3>No job cards yet</h3>
+                <p>
+                  The UI is ready, but this feed needs synced job data. Once the worker pushes openings, this area becomes your ranked shortlist.
                 </p>
               </div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
-                {opportunities.map(opp => (
+              <div className="opportunity-grid">
+                {opportunities.map((opp) => (
                   <div
                     key={opp.id}
-                    ref={el => { driveRefs.current[opp.id] = el; }}
-                    style={{ transition: "box-shadow 0.3s ease" }}
+                    ref={(el) => {
+                      driveRefs.current[opp.id] = el;
+                    }}
+                    className={highlightedDriveId === opp.id ? "highlight-shell" : undefined}
                   >
                     <OpportunityCard opportunity={opp} />
                   </div>
@@ -210,60 +259,59 @@ export default function DashboardClient({
             )}
           </article>
 
-          {/* Student Profile Panel */}
-          <article className="panel">
-            <div className="panel-header">
-              <div>
-                <div className="section-label">Student profile</div>
-                <h2>Verified foundation data</h2>
-              </div>
-              <span className="status-good">Verified</span>
-            </div>
-            <div className="summary-grid">
-              <div>
-                <div className="summary-label">Email</div>
-                <div className="summary-value" style={{ wordBreak: "break-all" }}>{student.college_email}</div>
-              </div>
-              <div>
-                <div className="summary-label">Branch</div>
-                <div className="summary-value">{student.branch}</div>
-              </div>
-              <div>
-                <div className="summary-label">CGPA</div>
-                <div className="summary-value">{parseFloat(student.cgpa).toFixed(2)}</div>
-              </div>
-              <div>
-                <div className="summary-label">Batch year</div>
-                <div className="summary-value">{student.batch_year}</div>
-              </div>
-            </div>
-          </article>
         </div>
 
-        {/* Right Column: Preferences, Category, & Alerts */}
-        <div style={{ display: "grid", gap: "20px" }}>
-          
-          {/* Notification Channel Preferences */}
-          <PreferencesPanel initialTargets={targets} onRefresh={handleRefreshTargets} />
+        <div className="dashboard-side-stack">
+          <PreferencesPanel initialTargets={targets} onRefresh={fetchOpportunities} />
 
-          {/* Company Categories coverage */}
           <article className="panel">
             <div className="panel-header">
               <div>
-                <div className="section-label">Coverage</div>
-                <h2>Company categories</h2>
+                <div className="section-label">Market shape</div>
+                <h2>Where your current coverage sits</h2>
               </div>
             </div>
-            <div className="category-list">
-              {categoryCounts.map(item => (
-                <div className="category-row" key={item.category} style={{ padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
-                  <span>{item.label}</span>
-                  <strong>{item.count}</strong>
+            <div className="compact-list">
+              {topCategories.map((item) => (
+                <div className="compact-row" key={item.category}>
+                  <div>
+                    <strong>{item.label}</strong>
+                    <p>Openings seeded across this employer cluster</p>
+                  </div>
+                  <span className="pill">{item.count}</span>
                 </div>
               ))}
             </div>
           </article>
 
+          <article className="panel">
+            <div className="panel-header">
+              <div>
+                <div className="section-label">Profile details</div>
+                <h2>Current student record</h2>
+              </div>
+            </div>
+            <div className="compact-list">
+              <div className="compact-row">
+                <div>
+                  <strong>Email</strong>
+                  <p style={{ wordBreak: "break-all" }}>{student.college_email}</p>
+                </div>
+              </div>
+              <div className="compact-row">
+                <div>
+                  <strong>Branch</strong>
+                  <p>{student.branch}</p>
+                </div>
+              </div>
+              <div className="compact-row">
+                <div>
+                  <strong>Batch</strong>
+                  <p>{student.batch_year}</p>
+                </div>
+              </div>
+            </div>
+          </article>
         </div>
       </section>
     </main>

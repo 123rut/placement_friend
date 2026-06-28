@@ -349,8 +349,8 @@ export default function CompaniesPage() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <div className="topbar-kicker">Sprint 2 Control Room</div>
-          <h1>Company Careers Scraping Pipeline</h1>
+          <div className="topbar-kicker">CareerPilot registry</div>
+          <h1>ATS company watchlist</h1>
         </div>
         <nav className="topbar-actions">
           <Link className="pill" href="/dashboard">

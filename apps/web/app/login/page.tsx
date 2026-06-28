@@ -117,7 +117,7 @@ export default function LoginPage() {
         <div className="panel-header" style={{ marginBottom: '24px' }}>
           <div>
             <div className="section-label">Welcome</div>
-            <h2>Placement & Alert Agent</h2>
+            <h2>CareerPilot AI</h2>
           </div>
         </div>
 

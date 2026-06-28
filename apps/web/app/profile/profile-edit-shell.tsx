@@ -137,12 +137,12 @@ export function ProfileEditShell({
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <div className="topbar-kicker">Settings</div>
-          <h1>Edit Student Profile</h1>
+          <div className="topbar-kicker">CareerPilot settings</div>
+          <h1>Tune your candidate profile</h1>
         </div>
         <nav className="topbar-actions">
           <Link className="primary-link" style={{ background: 'var(--muted)' }} href="/dashboard">
-            Back to Dashboard
+            Back to workspace
           </Link>
         </nav>
       </header>
@@ -153,7 +153,7 @@ export function ProfileEditShell({
           <div className="panel-header">
             <div>
               <div className="section-label">Account details</div>
-              <h2>Verified email domain</h2>
+              <h2>Verified academic identity</h2>
             </div>
             <span className="status-good">Verified</span>
           </div>
@@ -169,7 +169,7 @@ export function ProfileEditShell({
           </label>
 
           <p className="panel-note" style={{ marginTop: '16px' }}>
-            College domains are matched against verified education institutions database. To update your college domain, please register a new account.
+            Your college email anchors the trust layer for recommendations. To switch institutions, register a fresh account with the new domain.
           </p>
         </div>
 
@@ -178,7 +178,7 @@ export function ProfileEditShell({
           <div className="panel-header">
             <div>
               <div className="section-label">Information</div>
-              <h2>Student setup</h2>
+              <h2>Candidate baseline</h2>
             </div>
           </div>
 
@@ -247,11 +247,11 @@ export function ProfileEditShell({
 
           <div className="summary-grid" style={{ marginTop: '24px' }}>
             <div>
-              <div className="summary-label">Eligible company preview</div>
-              <div className="summary-value">{eligiblePreviewCount} matches in current seed set</div>
+              <div className="summary-label">Immediate fit preview</div>
+              <div className="summary-value">{eligiblePreviewCount} companies align right now</div>
             </div>
             <div>
-              <div className="summary-label">Tracked companies</div>
+              <div className="summary-label">Watchlist size</div>
               <div className="summary-value">{selectedCompanyIds.length} selected</div>
             </div>
           </div>
@@ -262,9 +262,9 @@ export function ProfileEditShell({
       <section className="workspace-section">
         <div className="section-bar">
           <div>
-            <div className="section-label">Seed catalog</div>
-            <h2>Top 100 company base</h2>
-            <p style={{ marginTop: '4px' }}>Select the companies you want to track for placement/internship drives.</p>
+            <div className="section-label">Watchlist editor</div>
+            <h2>Choose the companies your agent should monitor</h2>
+            <p style={{ marginTop: '4px' }}>These employers shape your shortlist, alerts, and future job-match flows.</p>
           </div>
           <div className="filter-row">
             <button

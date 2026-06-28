@@ -101,6 +101,11 @@ export function SprintOneShell({
       }
     }
 
+    // Persist active student ID to system_state so the worker auto-detects this student
+    await fetch("/api/system-state", { method: "POST" }).catch((err) =>
+      console.warn("Could not set active_student_id in system_state:", err)
+    );
+
     setMessage("Profile saved successfully! Redirecting...");
     setTimeout(() => {
       window.location.href = "/dashboard";
@@ -147,14 +152,14 @@ export function SprintOneShell({
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <div className="topbar-kicker">Sprint 1</div>
-          <h1>Placement & Internship Alert Agent</h1>
+          <div className="topbar-kicker">CareerPilot AI</div>
+          <h1>Build your career agent baseline</h1>
         </div>
         <nav className="topbar-actions">
-          <span className="pill">College email auth</span>
-          <span className="pill">100 seeded companies</span>
+          <span className="pill">Verified academic identity</span>
+          <span className="pill">Seeded employer watchlist</span>
           <Link className="primary-link" href="/dashboard">
-            Open foundation dashboard
+            Open career workspace
           </Link>
         </nav>
       </header>
@@ -164,7 +169,7 @@ export function SprintOneShell({
           <div className="panel-header">
             <div>
               <div className="section-label">Access</div>
-              <h2>College email verification</h2>
+              <h2>Institution-backed onboarding</h2>
             </div>
             <span className={detectedCollege ? "status-good" : "status-warn"}>
               {detectedCollege ? "Domain matched" : "College domain required"}
@@ -190,24 +195,24 @@ export function SprintOneShell({
             </div>
             <div>
               <div className="summary-label">Verification mode</div>
-              <div className="summary-value">Supabase magic link / OTP</div>
+              <div className="summary-value">Supabase auth session</div>
             </div>
           </div>
 
           <p className="panel-note">
             {detectedCollege
               ? `Domain ${detectedCollege.emailDomain} maps to ${detectedCollege.city}, ${detectedCollege.state}.`
-              : `Currently mapped colleges: ${colleges.length}. Add more domains in the Sprint 1 seed set as onboarding expands.`}
+              : `Currently mapped colleges: ${colleges.length}. This becomes the trust layer for profile-aware job recommendations.`}
           </p>
         </div>
 
         <div className="panel">
           <div className="panel-header">
             <div>
-              <div className="section-label">Profile</div>
-              <h2>Student setup</h2>
+              <div className="section-label">Candidate profile</div>
+              <h2>Seed the agent with your baseline</h2>
             </div>
-            <span className="status-good">Profile ready</span>
+            <span className="status-good">Career profile ready</span>
           </div>
 
           <div className="form-grid">
@@ -251,7 +256,7 @@ export function SprintOneShell({
             </label>
 
             <label className="field" style={{ gridColumn: '1 / -1', marginTop: '8px' }}>
-              <span>Target Companies to Track</span>
+              <span>Target companies to track</span>
               <div style={{ 
                 maxHeight: '160px', 
                 overflowY: 'auto', 
@@ -294,11 +299,11 @@ export function SprintOneShell({
 
           <div className="summary-grid" style={{ marginTop: '24px' }}>
             <div>
-              <div className="summary-label">Eligible company preview</div>
-              <div className="summary-value">{eligiblePreviewCount} matches in current seed set</div>
+              <div className="summary-label">Immediate fit preview</div>
+              <div className="summary-value">{eligiblePreviewCount} companies align with your current baseline</div>
             </div>
             <div>
-              <div className="summary-label">Tracked companies</div>
+              <div className="summary-label">Watchlist size</div>
               <div className="summary-value">{selectedCompanyIds.length} selected</div>
             </div>
           </div>
@@ -308,8 +313,8 @@ export function SprintOneShell({
       <section className="workspace-section">
         <div className="section-bar">
           <div>
-            <div className="section-label">Seed catalog</div>
-            <h2>Top 100 company base</h2>
+            <div className="section-label">Employer registry</div>
+            <h2>Choose the first companies your agent should watch</h2>
           </div>
           <div className="filter-row">
             <button

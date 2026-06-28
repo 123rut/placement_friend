@@ -1,21 +1,21 @@
 :root {
-  --bg: #f5f7fb;
-  --surface: #ffffff;
-  --surface-alt: #eef3ff;
-  --surface-muted: #f8fafc;
-  --text: #172033;
-  --muted: #5d6b82;
-  --line: #d8e1ee;
-  --accent: #2251cc;
-  --accent-soft: #e4ecff;
+  --bg: #f4efe6;
+  --surface: rgba(255, 252, 247, 0.92);
+  --surface-alt: #efe1c8;
+  --surface-muted: #fbf6ee;
+  --text: #1f2f26;
+  --muted: #6e7466;
+  --line: #ddcfba;
+  --accent: #1f6a52;
+  --accent-soft: #d9efe7;
   --good: #147d4f;
   --good-soft: #e7f6ee;
   --warn: #9a5a0a;
   --warn-soft: #fff2dd;
-  --shadow: 0 10px 28px rgba(16, 24, 40, 0.08);
-  --radius: 8px;
+  --shadow: 0 18px 38px rgba(63, 48, 24, 0.08);
+  --radius: 18px;
   --max-width: 1240px;
-  --font-sans: "Inter", "Segoe UI", sans-serif;
+  --font-sans: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
 }
 
 * {
@@ -29,7 +29,10 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--bg);
+  background:
+    radial-gradient(circle at top left, rgba(31, 106, 82, 0.08), transparent 28%),
+    radial-gradient(circle at top right, rgba(195, 132, 59, 0.12), transparent 24%),
+    linear-gradient(180deg, #f9f4ec 0%, #f2ebdf 100%);
   color: var(--text);
   font-family: var(--font-sans);
 }
@@ -147,6 +150,7 @@ button {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
 }
 
 .panel {
@@ -300,6 +304,346 @@ button {
   line-height: 1;
 }
 
+.metric-footnote,
+.hero-subtle,
+.opportunity-date,
+.preference-meta {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.careerpilot-shell {
+  padding-top: 32px;
+}
+
+.hero-board {
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  gap: 16px;
+}
+
+.hero-card,
+.spotlight-card {
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) + 4px);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.hero-card {
+  background:
+    linear-gradient(135deg, rgba(31, 106, 82, 0.95), rgba(16, 50, 40, 0.98)),
+    var(--accent);
+  color: #f6f1e8;
+}
+
+.hero-card .section-label,
+.hero-card .hero-subtle,
+.hero-card .hero-copy,
+.hero-card .hero-chip {
+  color: rgba(246, 241, 232, 0.9);
+}
+
+.hero-card h2,
+.spotlight-card h3 {
+  margin: 6px 0 0;
+  line-height: 1.1;
+}
+
+.hero-copy {
+  font-size: 1.02rem;
+  line-height: 1.7;
+  margin: 14px 0 0;
+  max-width: 58ch;
+}
+
+.hero-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.hero-stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.hero-stat {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.hero-stat span {
+  display: block;
+  font-size: 0.8rem;
+  color: rgba(246, 241, 232, 0.72);
+}
+
+.hero-stat strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.1rem;
+  color: #f6f1e8;
+}
+
+.hero-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.spotlight-card {
+  background:
+    linear-gradient(180deg, rgba(255, 252, 247, 0.94), rgba(249, 241, 229, 0.94)),
+    var(--surface);
+}
+
+.spotlight-metrics {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.signal-list {
+  margin: 14px 0 0;
+  padding-left: 18px;
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.career-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.career-dashboard {
+  grid-template-columns: 1.35fr 0.95fr;
+  align-items: start;
+}
+
+.dashboard-main-stack,
+.dashboard-side-stack,
+.careerpilot-form-stack,
+.preferences-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.careerpilot-action-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.careerpilot-block {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(255, 252, 247, 0.9), rgba(251, 246, 238, 0.95));
+}
+
+.careerpilot-block-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.careerpilot-block h3 {
+  margin: 4px 0 0;
+  font-size: 1.02rem;
+  line-height: 1.2;
+}
+
+.sync-note {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.opportunity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.loading-card {
+  height: 220px;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, #f2ebdd, #ede1ca);
+  border: 1px solid var(--line);
+}
+
+.empty-state {
+  padding: 24px;
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+  border: 1px dashed var(--line);
+}
+
+.highlight-shell {
+  transform: translateY(-2px);
+}
+
+.opportunity-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.opportunity-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.accent-label {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.opportunity-title {
+  margin: 6px 0 0;
+  font-size: 1.15rem;
+}
+
+.opportunity-metadata {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.9rem;
+}
+
+.meta-row span:first-child {
+  color: var(--muted);
+}
+
+.opportunity-footer {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.panel-button {
+  border: none;
+  justify-content: center;
+}
+
+.careerpilot-textarea {
+  min-height: 110px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+  padding: 12px 14px;
+  color: var(--text);
+}
+
+.careerpilot-search-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 10px;
+}
+
+.careerpilot-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.resume-preview,
+.agent-reply {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  background: var(--surface-muted);
+}
+
+.careerpilot-results {
+  display: grid;
+  gap: 12px;
+}
+
+.careerpilot-result-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fffdfa;
+}
+
+.careerpilot-result-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-reply pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  font: inherit;
+  line-height: 1.6;
+}
+
+.alert-inline {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: #9b1c1c;
+  background: #fde8e8;
+  border: 1px solid #f8b4b4;
+}
+
+.preference-card {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+}
+
+.preference-toggle-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.toggle-label input {
+  accent-color: var(--accent);
+}
+
 .category-list,
 .compact-list {
   display: grid;
@@ -326,6 +670,15 @@ button {
 @media (max-width: 1024px) {
   .catalog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-board,
+  .career-dashboard,
+  .career-metrics,
+  .opportunity-grid,
+  .careerpilot-search-grid,
+  .hero-stat-row {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -554,4 +907,3 @@ button {
   color: #9b1c1c;
   border: 1px solid #f8b4b4;
 }
-

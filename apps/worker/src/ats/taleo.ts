@@ -2,6 +2,7 @@ import { URL } from "url";
 import * as cheerio from "cheerio";
 import { ScrapedOpportunity } from "../agent";
 import { guessEligibilityFromRole } from "../validator";
+import { fetchWithTimeout } from "../fetchWithTimeout";
 
 export function detectProvider(urlStr: string): boolean {
   try {
@@ -14,10 +15,11 @@ export function detectProvider(urlStr: string): boolean {
 
 export async function extractJobs(urlStr: string): Promise<ScrapedOpportunity[]> {
   try {
-    const response = await fetch(urlStr, {
+    const response = await fetchWithTimeout(urlStr, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      }
+      },
+      timeout: 10000
     });
 
     if (!response.ok) {

@@ -3,10 +3,77 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { rateLimitGemini, rateLimitGroq } from "./rateLimiter";
 import { guessEligibilityFromRole, isStudentEligible, isGeneralCareersUrl, isGenericRoleName } from "./validator";
+import { fetchWithTimeout } from "./fetchWithTimeout";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, "../../../.env.local") });
+
+/**
+ * Strips non-content tags from HTML before sending to LLM.
+ * Removes scripts, styles, nav, header, footer, noscript and comments.
+ * Expected to reduce token count by ~60-70%.
+ */
+/**
+ * Aggressively extracts only job-relevant text + links from HTML.
+ * Drops all tag markup, attributes, scripts, styles, etc.
+ * Reduces token count by ~85-95% vs raw HTML.
+ */
+function cleanHtmlForAI(html: string): string {
+  // 1. Remove entire noisy blocks
+  html = html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+    .replace(/<header[\s\S]*?<\/header>/gi, "")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
+    .replace(/<svg[\s\S]*?<\/svg>/gi, "")
+    .replace(/<picture[\s\S]*?<\/picture>/gi, "")
+    .replace(/<canvas[\s\S]*?<\/canvas>/gi, "")
+    .replace(/<video[\s\S]*?<\/video>/gi, "")
+    .replace(/<audio[\s\S]*?<\/audio>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+
+  // 2. Extract href + text from anchor tags BEFORE stripping all tags
+  //    Preserves applyUrl info in a compact format the LLM can read
+  html = html.replace(
+    /<a[\s\S]*?href=["']([^"']+)["'][\s\S]*?>([\s\S]*?)<\/a>/gi,
+    (_, href, inner) => {
+      const text = inner.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+      if (!text) return "";
+      return `[${text}](${href}) `;
+    }
+  );
+
+  // 3. Strip all remaining HTML tags
+  html = html.replace(/<[^>]{1,300}>/g, " ");
+
+  // 4. Decode common HTML entities
+  html = html
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#\d+;/g, " ");
+
+  // 5. Collapse whitespace
+  html = html.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+
+  // 6. Hard cap — LLMs rarely need more than ~12k chars to find job listings
+  return html.slice(0, 12000);
+}
+
+/**
+ * Parses the retry-after duration from a Groq 429 error message.
+ * e.g. "Please try again in 13.26s" → 16 (ceil + 2s buffer)
+ */
+function parseRetryAfter(errorText: string): number {
+  const match = errorText.match(/try again in ([\d.]+)s/);
+  return match ? Math.ceil(parseFloat(match[1])) + 2 : 15;
+}
 
 export interface ScrapedOpportunity {
   role: string;
@@ -24,70 +91,116 @@ export async function extractOpportunities(
   studentBranch?: string | null,
   careersUrl?: string | null
 ): Promise<ScrapedOpportunity[]> {
-  const groqApiKey = process.env.GROQ_API_KEY;
+  // Clean HTML before sending to any LLM — strips scripts, styles, nav, etc.
+  const rawLen = text.length;
+  text = cleanHtmlForAI(text);
+  console.log(`[${companyId}] HTML cleanup: ${rawLen} → ${text.length} chars`);
+  // Collect all available Groq keys — rotate through them on 429 to triple effective TPM
+  const groqKeys = [
+    process.env.GROQ_API_KEY,
+    process.env.GROQ_API_KEY_2,
+    process.env.GROQ_API_KEY_3,
+  ].filter(Boolean) as string[];
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
   const geminiApiKey = process.env.GEMINI_API_KEY;
 
-  if (groqApiKey) {
-    try {
-      console.log(`Using Groq API to extract opportunities for: ${companyId}`);
-      let systemInstruction = "You are an expert scraping assistant. Extract open specific, individual job postings (placements and internships) from the provided text/HTML. " +
-        "CRITICAL: Do NOT extract broad category pages, divisions, departments, general landing pages, or search pages (e.g. do NOT extract 'Technology', 'Engineering Careers', 'Students and Graduates', 'Sales', 'Entry-Level Opportunity', 'Oracle NetSuite', 'Key hiring areas'). " +
-        "Only extract actual individual job roles (e.g., 'Software Engineer Intern', 'Backend Developer', 'Data Analyst'). " +
-        "Each opportunity must have a direct link (applyUrl) to the specific job details or application page, NOT a general careers index or search page. If no specific individual job postings are listed in the text, return an empty array. " +
-        "Return a JSON object with an 'opportunities' key containing an array of opportunities. Each opportunity must have fields: role (string), eligibility (string, comma-separated branches like 'Computer Science, IT'), deadline (ISO 8601 string or null), and applyUrl (string, absolute link). Return ONLY valid JSON.";
-      if (studentBranch) {
-        systemInstruction += ` The student belongs to ${studentBranch}. Prioritize and extract only opportunities relevant to ${studentBranch} students. Exclude opportunities clearly intended for unrelated branches (e.g. if the branch is CS, exclude HR, marketing, sales, mechanical, civil, chemical, etc.). If uncertain whether a role is relevant to ${studentBranch}, INCLUDE it.`;
-      }
-      const prompt = `Extract opportunities for company "${companyId}" from this text:\n\n${text.slice(0, 50000)}`;
+  // Fix 2: Skip LLM entirely when the page has no job-related keywords.
+  // Saves ~2,000 tokens per empty landing page (Accenture, Bosch, Deloitte, etc.)
+  const JOB_SIGNAL = /intern|engineer|developer|analyst|scientist|architect|consultant|associate|graduate|placement/i;
+  if (!JOB_SIGNAL.test(text)) {
+    console.log(`[${companyId}] No job signals in page — skipping LLM call`);
+    return [];
+  }
 
-      await rateLimitGroq();
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${groqApiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [
-            {
-              role: "system",
-              content: systemInstruction
-            },
-            {
-              role: "user",
-              content: prompt
-            }
-          ],
-          response_format: { type: "json_object" },
-          temperature: 0.1
-        })
-      });
+  if (groqKeys.length > 0) {
+    // Compact system prompt (~80 tokens vs ~500 previously)
+    const systemInstruction = `Extract job postings from HTML/text. Return JSON: {"opportunities":[{"role":"string","eligibility":"string","deadline":"ISO8601|null","applyUrl":"string"}]}
+Rules: only specific roles (e.g. "SWE Intern"), not categories. applyUrl must be a direct job link, not a careers homepage. Empty array if none found.${studentBranch ? ` Only include roles relevant to ${studentBranch}.` : ""}`;
 
-      if (response.ok) {
-        const json = await response.json();
-        const content = json.choices?.[0]?.message?.content || "";
-        const parsed = JSON.parse(content);
-        if (parsed && Array.isArray(parsed.opportunities)) {
-          return parsed.opportunities;
+    // 6k char cap + truncate long URLs that waste tokens
+    const compactText = text
+      .replace(/https?:\/\/[^\s)]{50,}/g, url => url.slice(0, 50) + "\u2026")
+      .slice(0, 6000);
+    const prompt = `Company: ${companyId}\n\n${compactText}`;
+
+    const groqBody = JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: systemInstruction },
+        { role: "user", content: prompt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.1
+    });
+
+    // Try each key in sequence — on 429 rotate to the next key immediately
+    for (let i = 0; i < groqKeys.length; i++) {
+      const key = groqKeys[i];
+      try {
+        console.log(`Using Groq API (key ${i + 1}/${groqKeys.length}) for: ${companyId}`);
+        await rateLimitGroq();
+        const response = await fetchWithTimeout("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+          body: groqBody,
+          timeout: 30000
+        });
+
+        if (response.status === 429) {
+          const errText = await response.text();
+          if (i < groqKeys.length - 1) {
+            // More keys available — rotate immediately, no wait needed
+            console.log(`[Groq key ${i + 1}] Rate limited — rotating to key ${i + 2}`);
+            continue;
+          }
+          // Last key also hit 429 — parse wait and retry this key once before falling to Gemini
+          const waitSecs = parseRetryAfter(errText);
+          console.log(`[Groq] All keys rate limited. Waiting ${waitSecs}s then retrying key 1...`);
+          await new Promise(r => setTimeout(r, waitSecs * 1000));
+          await rateLimitGroq();
+          const retryResponse = await fetchWithTimeout("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${groqKeys[0]}`, "Content-Type": "application/json" },
+            body: groqBody,
+            timeout: 30000
+          });
+          if (retryResponse.ok) {
+            const json = await retryResponse.json();
+            const content = json.choices?.[0]?.message?.content || "";
+            const parsed = JSON.parse(content);
+            if (parsed && Array.isArray(parsed.opportunities)) return parsed.opportunities;
+          }
+          break; // Fall through to next provider
         }
-      } else {
-        console.warn(`Groq API returned status ${response.status} with error: ${await response.text()}`);
+
+        if (response.ok) {
+          const json = await response.json();
+          const content = json.choices?.[0]?.message?.content || "";
+          const parsed = JSON.parse(content);
+          if (parsed && Array.isArray(parsed.opportunities)) return parsed.opportunities;
+          break; // Parsed but no opportunities array — don't retry other keys
+        } else {
+          console.warn(`[Groq key ${i + 1}] Returned status ${response.status}`);
+          break; // Non-429 error (400/500) — won't be fixed by rotating keys
+        }
+      } catch (err) {
+        console.warn(`[Groq key ${i + 1}] Call failed:`, err);
+        break;
       }
-    } catch (err) {
-      console.warn("Groq API call failed, falling back:", err);
     }
   }
 
   if (anthropicApiKey) {
     try {
-      const systemInstruction = "You are an expert scraping assistant. Extract open specific, individual job postings (placements and internships) from the provided text/HTML. " +
-        "CRITICAL: Do NOT extract broad category pages, divisions, departments, general landing pages, or search pages (e.g. do NOT extract 'Technology', 'Engineering Careers', 'Students and Graduates', 'Sales', 'Entry-Level Opportunity', 'Oracle NetSuite', 'Key hiring areas'). " +
-        "Only extract actual individual job roles (e.g., 'Software Engineer Intern', 'Backend Developer', 'Data Analyst'). " +
-        "Each opportunity must have a direct link (applyUrl) to the specific job details or application page, NOT a general careers index or search page. If no specific individual job postings are listed in the text, return an empty array. " +
-        "Return a JSON array of opportunities with fields: role (string), eligibility (string, comma-separated branches like 'Computer Science, IT'), deadline (ISO 8601 string or null), and applyUrl (string, absolute link). Return ONLY the raw JSON array inside a code block, no explanations." + (studentBranch ? ` The student belongs to ${studentBranch}. Prioritize and extract only opportunities relevant to ${studentBranch} students. Exclude opportunities clearly intended for unrelated branches (e.g. if the branch is CS, exclude HR, marketing, sales, mechanical, civil, chemical, etc.). If uncertain whether a role is relevant to ${studentBranch}, INCLUDE it.` : "");
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      // Fix 1: compact system prompt
+      const systemInstruction = `Extract job postings from HTML/text. Return a JSON array: [{"role":"string","eligibility":"string","deadline":"ISO8601|null","applyUrl":"string"}]
+Rules: only specific roles (e.g. "SWE Intern"), not categories. applyUrl must be a direct job link. Empty array if none found. Return ONLY the raw JSON array.${studentBranch ? ` Only include roles relevant to ${studentBranch}.` : ""}`;
+
+      // Fix 3: 6k char cap + truncate long URLs
+      const compactText = text
+        .replace(/https?:\/\/[^\s)]{50,}/g, url => url.slice(0, 50) + "\u2026")
+        .slice(0, 6000);
+      const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
           "x-api-key": anthropicApiKey,
@@ -101,15 +214,21 @@ export async function extractOpportunities(
           messages: [
             {
               role: "user",
-              content: `Extract opportunities for company "${companyId}" from this text:\n\n${text.slice(0, 50000)}`
+              content: `Company: ${companyId}\n\n${compactText}`
             }
           ]
-        })
+        }),
+        timeout: 30000
       });
 
       if (response.ok) {
         const json = await response.json();
-        const content = json.content?.[0]?.text || "";
+        const rawText = json.content?.[0]?.text ?? "";
+        const content = typeof rawText === "string" ? rawText : "";
+        if (!content) {
+          console.warn(`[${companyId}] Claude returned empty/null response. Skipping.`);
+          return [];
+        }
         const jsonMatch = content.match(/\[[\s\S]*?\]/);
         if (jsonMatch) {
           return JSON.parse(jsonMatch[0]);
@@ -125,16 +244,19 @@ export async function extractOpportunities(
   if (geminiApiKey) {
     try {
       console.log(`Using Gemini API to extract opportunities for: ${companyId}`);
-      let systemInstruction = "You are an expert scraping assistant. Extract open specific, individual job postings (placements and internships) from the provided text/HTML. " +
-        "CRITICAL: Do NOT extract broad category pages, divisions, departments, general landing pages, or search pages (e.g. do NOT extract 'Technology', 'Engineering Careers', 'Students and Graduates', 'Sales', 'Entry-Level Opportunity', 'Oracle NetSuite', 'Key hiring areas'). " +
-        "Only extract actual individual job roles (e.g., 'Software Engineer Intern', 'Backend Developer', 'Data Analyst'). " +
-        "Each opportunity must have a direct link (applyUrl) to the specific job details or application page, NOT a general careers index or search page. If no specific individual job postings are listed in the text, return an empty array. " +
-        "Return a JSON array of opportunities with fields: role (string), eligibility (string, comma-separated branches like 'Computer Science, IT'), deadline (ISO 8601 string or null), and applyUrl (string, absolute link). Return ONLY the raw JSON array.";
-      const prompt = `Extract opportunities for company "${companyId}" from this text:\n\n${text.slice(0, 50000)}`;
+      // Fix 1: compact system prompt
+      const systemInstruction = `Extract job postings from HTML/text. Return a JSON array: [{"role":"string","eligibility":"string","deadline":"ISO8601|null","applyUrl":"string"}]
+Rules: only specific roles (e.g. "SWE Intern"), not categories. applyUrl must be a direct job link. Empty array if none found. Return ONLY the raw JSON array.${studentBranch ? ` Only include roles relevant to ${studentBranch}.` : ""}`;
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
+      // Fix 3: 6k char cap + truncate long URLs
+      const compactText = text
+        .replace(/https?:\/\/[^\s)]{50,}/g, url => url.slice(0, 50) + "\u2026")
+        .slice(0, 6000);
+      const prompt = `Company: ${companyId}\n\n${compactText}`;
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
       await rateLimitGemini();
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -152,12 +274,20 @@ export async function extractOpportunities(
           generationConfig: {
             responseMimeType: "application/json"
           }
-        })
+        }),
+        timeout: 30000
       });
 
       if (response.ok) {
         const json = await response.json();
-        const content = json.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        // Guard against null candidates (safety-blocked or empty response from Gemini)
+        const candidates = Array.isArray(json?.candidates) ? json.candidates : [];
+        const rawText = candidates[0]?.content?.parts?.[0]?.text ?? "";
+        const content = typeof rawText === "string" ? rawText : "";
+        if (!content) {
+          console.warn(`[${companyId}] Gemini returned empty/null response. Skipping.`);
+          return [];
+        }
         const jsonMatch = content.match(/\[[\s\S]*?\]/);
         if (jsonMatch) {
           return JSON.parse(jsonMatch[0]);
@@ -272,7 +402,7 @@ function guessDeadline(context: string): string | null {
   if (match) {
     try {
       return new Date(match[0]).toISOString();
-    } catch {}
+    } catch { }
   }
   return null;
 }

@@ -24,24 +24,23 @@ export default function PreferencesPanel({ initialTargets, onRefresh }: Preferen
   const handleToggle = async (
     companyId: string,
     channel: "email" | "dashboard",
-    currentVal: boolean
+    currentVal: boolean,
   ) => {
     setUpdatingId(`${companyId}-${channel}`);
-    const updatedTargets = targets.map(t => {
-      if (t.company_id === companyId) {
+    const updatedTargets = targets.map((target) => {
+      if (target.company_id === companyId) {
         return {
-          ...t,
-          [channel === "email" ? "notify_email" : "notify_dashboard"]: !currentVal
+          ...target,
+          [channel === "email" ? "notify_email" : "notify_dashboard"]: !currentVal,
         };
       }
-      return t;
+      return target;
     });
 
-    // Optimistically update
     setTargets(updatedTargets);
 
     try {
-      const target = updatedTargets.find(t => t.company_id === companyId);
+      const target = updatedTargets.find((item) => item.company_id === companyId);
       if (!target) return;
 
       const res = await fetch("/api/students/preferences", {
@@ -50,20 +49,18 @@ export default function PreferencesPanel({ initialTargets, onRefresh }: Preferen
         body: JSON.stringify({
           company_id: companyId,
           notify_email: target.notify_email,
-          notify_dashboard: target.notify_dashboard
-        })
+          notify_dashboard: target.notify_dashboard,
+        }),
       });
 
       if (!res.ok) {
-        // Revert on error
         setTargets(targets);
-        console.error("Failed to update preference on backend");
       } else {
         onRefresh();
       }
     } catch (err) {
-      setTargets(targets);
       console.error("Failed to update preferences:", err);
+      setTargets(targets);
     } finally {
       setUpdatingId(null);
     }
@@ -73,62 +70,43 @@ export default function PreferencesPanel({ initialTargets, onRefresh }: Preferen
     <article className="panel">
       <div className="panel-header">
         <div>
-          <div className="section-label">Alerts Configuration</div>
-          <h2 style={{ fontSize: "1.25rem", margin: "4px 0 0" }}>Notification Channels</h2>
+          <div className="section-label">Watchlist routing</div>
+          <h2>How CareerPilot should notify you</h2>
         </div>
       </div>
-      
-      <p className="panel-note" style={{ fontSize: "0.86rem", marginBottom: "16px" }}>
-        Configure how you want to be alerted when matching opportunities are scraped for your target companies.
+
+      <p className="panel-note">
+        Choose where signals from tracked companies should land while the ATS registry keeps refreshing in the background.
       </p>
 
       {targets.length === 0 ? (
-        <p style={{ color: "var(--muted)", fontStyle: "italic", padding: "8px 0" }}>
-          You aren't tracking any companies yet. Add targets from your student workspace.
-        </p>
+        <p className="panel-note">No tracked companies yet. Build your watchlist first, then this panel becomes your alert router.</p>
       ) : (
-        <div style={{ display: "grid", gap: "12px" }}>
-          {targets.map(target => (
-            <div
-              key={target.company_id}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "10px 12px",
-                border: "1px solid var(--line)",
-                borderRadius: "var(--radius)",
-                background: "var(--surface-muted)"
-              }}
-            >
+        <div className="preferences-grid">
+          {targets.map((target) => (
+            <div key={target.company_id} className="preference-card">
               <div>
-                <strong style={{ fontSize: "0.92rem", color: "var(--text)" }}>{target.name}</strong>
-                <div style={{ fontSize: "0.76rem", color: "var(--muted)", textTransform: "capitalize" }}>
-                  Category: {target.category.replace("-", " ")}
-                </div>
+                <strong>{target.name}</strong>
+                <div className="preference-meta">{target.category.replace("-", " ")}</div>
               </div>
 
-              <div style={{ display: "flex", gap: "16px" }}>
-                {/* Dashboard Alert Toggle */}
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.84rem" }}>
+              <div className="preference-toggle-row">
+                <label className="toggle-label">
                   <input
                     type="checkbox"
                     checked={target.notify_dashboard}
                     disabled={updatingId === `${target.company_id}-dashboard`}
                     onChange={() => handleToggle(target.company_id, "dashboard", target.notify_dashboard)}
-                    style={{ accentColor: "var(--accent)", width: "16px", height: "16px" }}
                   />
                   <span>Dashboard</span>
                 </label>
 
-                {/* Email Alert Toggle */}
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.84rem" }}>
+                <label className="toggle-label">
                   <input
                     type="checkbox"
                     checked={target.notify_email}
                     disabled={updatingId === `${target.company_id}-email`}
                     onChange={() => handleToggle(target.company_id, "email", target.notify_email)}
-                    style={{ accentColor: "var(--accent)", width: "16px", height: "16px" }}
                   />
                   <span>Email</span>
                 </label>

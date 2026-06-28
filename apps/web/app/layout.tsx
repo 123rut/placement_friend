@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Placement & Internship Alert Agent",
-  description: "Centralized placement and internship alerts with eligibility-aware notifications."
+  title: "CareerPilot AI",
+  description: "An AI-powered career agent for resume-aware job discovery, matching, and application planning."
 };
 
 export default function RootLayout({
