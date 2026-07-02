@@ -17,7 +17,7 @@ export class AgentController {
     }
 
     try {
-      return this.agentService.chat(userId, message, conversationId);
+      return await this.agentService.chat(userId, message, conversationId);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       throw new InternalServerErrorException(`CareerPilot agent failed: ${message}`);

@@ -27,6 +27,19 @@ interface DashboardClientProps {
   collegeName: string;
 }
 
+interface MatchedJobCard {
+  id: string;
+  job_id: string;
+  title: string;
+  url: string;
+  location: string | null;
+  company_name: string;
+  match_score: number | null;
+  explanation: string | null;
+  strengths: string[] | null;
+  missing_skills: string[] | null;
+}
+
 export default function DashboardClient({
   student,
   collegesCount,
@@ -36,6 +49,7 @@ export default function DashboardClient({
   collegeName,
 }: DashboardClientProps) {
   const [opportunities, setOpportunities] = useState<OpportunityData[]>([]);
+  const [matchedJobs, setMatchedJobs] = useState<MatchedJobCard[]>([]);
   const [targets] = useState<CompanyTarget[]>(initialTargets);
   const [loadingOpps, setLoadingOpps] = useState(true);
   const [highlightedDriveId, setHighlightedDriveId] = useState<string | null>(null);
@@ -104,10 +118,19 @@ export default function DashboardClient({
   const fetchOpportunities = async () => {
     setLoadingOpps(true);
     try {
-      const res = await fetch("/api/opportunities");
-      if (res.ok) {
-        const result = await res.json();
+      const [opportunitiesRes, matchesRes] = await Promise.all([
+        fetch("/api/opportunities"),
+        fetch("/api/careerpilot/jobs"),
+      ]);
+
+      if (opportunitiesRes.ok) {
+        const result = await opportunitiesRes.json();
         setOpportunities(result.data || []);
+      }
+
+      if (matchesRes.ok) {
+        const result = await matchesRes.json();
+        setMatchedJobs(Array.isArray(result) ? result : []);
       }
     } catch (err) {
       console.error("Failed to fetch opportunities:", err);
@@ -235,27 +258,78 @@ export default function DashboardClient({
                   <div key={i} className="loading-card" />
                 ))}
               </div>
-            ) : opportunities.length === 0 ? (
+            ) : matchedJobs.length === 0 && opportunities.length === 0 ? (
               <div className="empty-state">
                 <h3>No job cards yet</h3>
                 <p>
-                  The UI is ready, but this feed needs synced job data. Once the worker pushes openings, this area becomes your ranked shortlist.
+                  Sync jobs, then score a role or ask the agent to find matching roles. Once a match is computed, it will appear here as your ranked shortlist.
                 </p>
               </div>
             ) : (
-              <div className="opportunity-grid">
-                {opportunities.map((opp) => (
-                  <div
-                    key={opp.id}
-                    ref={(el) => {
-                      driveRefs.current[opp.id] = el;
-                    }}
-                    className={highlightedDriveId === opp.id ? "highlight-shell" : undefined}
-                  >
-                    <OpportunityCard opportunity={opp} />
+              <>
+                {matchedJobs.length > 0 ? (
+                  <div className="opportunity-grid">
+                    {matchedJobs.map((job) => (
+                      <article className="panel opportunity-card matched-job-card" key={job.id || job.job_id}>
+                        <div>
+                          <div className="opportunity-topline">
+                            <div>
+                              <span className="section-label accent-label">{job.company_name}</span>
+                              <h3 className="opportunity-title">{job.title}</h3>
+                            </div>
+                            <span className="status-good">
+                              {job.match_score === null ? "Matched" : `${Math.round(job.match_score)}% match`}
+                            </span>
+                          </div>
+
+                          <p className="panel-note">{job.explanation || "CareerPilot matched this role to your profile."}</p>
+
+                          <div className="opportunity-metadata">
+                            <div className="meta-row">
+                              <span>Location</span>
+                              <strong>{job.location || "Not listed"}</strong>
+                            </div>
+                            <div className="meta-row">
+                              <span>Strengths</span>
+                              <strong title={(job.strengths || []).join(", ")}>
+                                {job.strengths && job.strengths.length > 0 ? job.strengths.slice(0, 3).join(", ") : "Profile aligned"}
+                              </strong>
+                            </div>
+                            <div className="meta-row">
+                              <span>Gaps</span>
+                              <strong title={(job.missing_skills || []).join(", ")}>
+                                {job.missing_skills && job.missing_skills.length > 0 ? job.missing_skills.slice(0, 3).join(", ") : "No major gaps"}
+                              </strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="opportunity-footer">
+                          <a href={job.url} target="_blank" rel="noopener noreferrer" className="primary-link">
+                            Open Role
+                          </a>
+                        </div>
+                      </article>
+                    ))}
                   </div>
-                ))}
-              </div>
+                ) : null}
+
+                {opportunities.length > 0 ? (
+                  <div className="opportunity-grid">
+                    {opportunities.map((opp) => (
+                      <div
+                        key={opp.id}
+                        ref={(el) => {
+                          driveRefs.current[opp.id] = el;
+                        }}
+                        className={highlightedDriveId === opp.id ? "highlight-shell" : undefined}
+                      >
+                        <OpportunityCard opportunity={opp} />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </>
             )}
           </article>
 

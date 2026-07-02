@@ -6,6 +6,8 @@ import {
   JobSearchFilters,
   JobSearchResult,
   MatchExplanation,
+  PreferredRequirementMatch,
+  RequirementCheck,
 } from "../careerpilot.types";
 import { DB_POOL } from "../db/db.module";
 import { fetchWithRetry } from "../utils/fetch-retry";
@@ -140,7 +142,11 @@ export class JobsService {
     )`;
   }
 
-  async matchJobToProfile(jobId: string, userId: string): Promise<JobMatchResult | { error: string }> {
+  async matchJobToProfile(
+    jobId: string,
+    userId: string,
+    options: { fast?: boolean } = {},
+  ): Promise<JobMatchResult | { error: string }> {
     const profileRes = await this.pool.query(
       `SELECT id,
               user_id,
@@ -188,38 +194,74 @@ export class JobsService {
       vectorScore = simRes.rows[0]?.score ?? null;
     }
 
-    let batchYear: number | null = null;
+    let studentRecord: { batchYear: number | null; branch: string | null } = {
+      batchYear: null,
+      branch: null,
+    };
     try {
       const studentRes = await this.pool.query(
-        "SELECT batch_year FROM students WHERE id = $1",
+        "SELECT batch_year, branch FROM students WHERE id = $1",
         [userId]
       );
       if (studentRes.rows[0]) {
-        batchYear = Number(studentRes.rows[0].batch_year);
+        studentRecord = {
+          batchYear: Number(studentRes.rows[0].batch_year),
+          branch: studentRes.rows[0].branch || null,
+        };
       }
     } catch {
       // ignore
     }
 
-    if (!batchYear && profile.education) {
+    if (!studentRecord.batchYear && profile.education) {
       const years = profile.education.map((e) => Number(e.year)).filter((y) => !isNaN(y) && y > 2000);
       if (years.length > 0) {
-        batchYear = Math.max(...years);
+        studentRecord.batchYear = Math.max(...years);
       }
     }
 
     const jobText = `${String(job.title || "")} ${String(job.description || "")}`.toLowerCase();
-    const verification = this.verifyCompulsoryRequirements(profile, jobText, String(job.title || ""), batchYear);
+    const hardRequirements = this.buildHardRequirementChecks(
+      profile,
+      jobText,
+      String(job.title || ""),
+      String(job.location || ""),
+      studentRecord,
+    );
+    const failedChecks = hardRequirements.filter((check) => !check.passed);
+    const preferredRequirements = this.buildPreferredRequirementMatches(profile, jobText);
+    const missingSkills = preferredRequirements.filter((item) => !item.matched).map((item) => item.skill);
 
-    if (!verification.ok) {
+    if (failedChecks.length > 0) {
       await this.pool.query(
         `DELETE FROM job_matches WHERE user_id = $1::uuid AND job_id = $2::uuid`,
         [userId, jobId]
       );
-      return { error: `Compulsory check failed: ${verification.mismatches.join(" ")}` };
+
+      const rejectionReasons = failedChecks.map((check) => check.detail);
+      return {
+        jobId,
+        jobTitle: job.title,
+        company: job.company_name,
+        eligible: false,
+        matchScore: null,
+        vectorSimilarity: vectorScore === null ? null : Math.round(vectorScore * 100),
+        explanation: `This role is not eligible for your profile yet. ${rejectionReasons.join(" ")}`,
+        strengths: profile.skills.slice(0, 3),
+        missingSkills,
+        hardRequirements,
+        preferredRequirements,
+        recommendation: "Skip this role for now and focus on jobs where the mandatory requirements match your profile.",
+        rejectionReasons,
+        applyUrl: job.url,
+      };
     }
 
-    const explanation = await this.generateMatchExplanation(profile, job, vectorScore, batchYear);
+    const explanation = options.fast
+      ? this.buildHeuristicMatch(profile, job, vectorScore, studentRecord.batchYear)
+      : await this.generateMatchExplanation(profile, job, vectorScore, studentRecord.batchYear);
+    const preferredScore = this.calculatePreferredRequirementScore(preferredRequirements);
+    const finalScore = Math.round(explanation.matchScore * 0.65 + preferredScore * 0.35);
 
     await this.pool.query(
       `INSERT INTO job_matches (user_id, job_id, match_score, explanation, strengths, missing_skills)
@@ -233,10 +275,10 @@ export class JobsService {
       [
         userId,
         jobId,
-        explanation.matchScore,
+        finalScore,
         explanation.explanation,
         explanation.strengths,
-        explanation.missingSkills,
+        missingSkills,
       ],
     );
 
@@ -244,11 +286,19 @@ export class JobsService {
       jobId,
       jobTitle: job.title,
       company: job.company_name,
-      matchScore: explanation.matchScore,
+      eligible: true,
+      matchScore: finalScore,
       vectorSimilarity: vectorScore === null ? null : Math.round(vectorScore * 100),
       explanation: explanation.explanation,
       strengths: explanation.strengths,
-      missingSkills: explanation.missingSkills,
+      missingSkills,
+      hardRequirements,
+      preferredRequirements,
+      recommendation:
+        missingSkills.length > 0
+          ? `Improve ${missingSkills.slice(0, 3).join(", ")} to raise your confidence score for similar roles.`
+          : "You satisfy the detected hard requirements and match the main preferred skills for this role.",
+      rejectionReasons: [],
       applyUrl: job.url,
     };
   }
@@ -490,6 +540,146 @@ Return JSON only:
     };
   }
 
+  private buildHardRequirementChecks(
+    profile: CandidateProfileRecord,
+    jobText: string,
+    jobTitle: string,
+    jobLocation: string,
+    studentRecord: { batchYear: number | null; branch: string | null },
+  ): RequirementCheck[] {
+    const checks: RequirementCheck[] = [];
+    const batchYear = studentRecord.batchYear;
+    const isStudent = !!batchYear && batchYear >= 2025 && batchYear <= 2028;
+    const requiredYears = this.extractRequiredYearsOfExperience(jobText);
+    const candidateYears = this.getCandidateExperienceYears(profile);
+
+    checks.push({
+      label: "Experience",
+      passed: requiredYears === 0 || (!isStudent && candidateYears >= requiredYears) || (isStudent && requiredYears < 2),
+      detail:
+        requiredYears === 0
+          ? "No explicit experience minimum was detected."
+          : candidateYears >= requiredYears
+            ? `Resume shows ${candidateYears} year(s) against a ${requiredYears}+ year requirement.`
+            : `Job requires ${requiredYears}+ years of experience, but your resume shows ${candidateYears} year(s).`,
+    });
+
+    const requiredDegrees = this.extractRequiredDegrees(jobText);
+    const degreeMatched = requiredDegrees.length === 0 || this.matchCandidateDegree(profile.education || [], requiredDegrees);
+    checks.push({
+      label: "Degree",
+      passed: degreeMatched,
+      detail:
+        requiredDegrees.length === 0
+          ? "No explicit degree requirement was detected."
+          : degreeMatched
+            ? `Detected degree requirement matched: ${requiredDegrees.join(" or ")}.`
+            : `Job requires ${requiredDegrees.join(" or ")}, but your parsed education does not show a match.`,
+    });
+
+    const requiredBranches = this.extractRequiredBranches(jobText);
+    const candidateBranches = [
+      studentRecord.branch,
+      ...profile.education.map((item) => item.branch),
+    ]
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .map((value) => value.toLowerCase());
+    const branchMatched =
+      requiredBranches.length === 0 ||
+      requiredBranches.some((branch) => candidateBranches.some((candidateBranch) => candidateBranch.includes(branch)));
+    checks.push({
+      label: "Branch",
+      passed: branchMatched,
+      detail:
+        requiredBranches.length === 0
+          ? "No explicit branch requirement was detected."
+          : branchMatched
+            ? `Detected branch requirement matched: ${requiredBranches.join(" or ")}.`
+            : `Job expects ${requiredBranches.join(" or ")}, but your profile branch does not show a match.`,
+    });
+
+    const requiredBatchYears = this.extractRequiredBatchYears(jobText);
+    const batchMatched = requiredBatchYears.length === 0 || (!!batchYear && requiredBatchYears.includes(batchYear));
+    checks.push({
+      label: "Graduation year",
+      passed: batchMatched,
+      detail:
+        requiredBatchYears.length === 0
+          ? "No explicit graduation-year requirement was detected."
+          : batchMatched
+            ? `Your ${batchYear} batch matches the detected graduation-year requirement.`
+            : `Job expects batch ${requiredBatchYears.join(" or ")}, but your profile shows ${batchYear || "no batch year"}.`,
+    });
+
+    const locationMatched = this.matchesLocationRequirement(profile.preferredLocation, jobLocation, jobText);
+    checks.push({
+      label: "Location",
+      passed: locationMatched,
+      detail: locationMatched
+        ? "Location is compatible with the job location or no strict location requirement was detected."
+        : `Job appears location-specific for ${jobLocation}, but your preferred location is ${profile.preferredLocation || "not set"}.`,
+    });
+
+    const isSenior = this.isSeniorRoleFromTitle(jobTitle);
+    checks.push({
+      label: "Seniority",
+      passed: !(isSenior && isStudent),
+      detail:
+        isSenior && isStudent
+          ? "This is a Senior/Lead/Staff level role, which is unsuitable for a graduating student profile."
+          : "No seniority conflict was detected.",
+    });
+
+    return checks;
+  }
+
+  private buildPreferredRequirementMatches(
+    profile: CandidateProfileRecord,
+    jobText: string,
+  ): PreferredRequirementMatch[] {
+    const profileSkills = new Set(
+      [
+        ...profile.skills,
+        ...profile.projects.flatMap((project) => project.tech || []),
+      ].map((skill) => skill.toLowerCase()),
+    );
+
+    return JOB_SKILL_TERMS
+      .filter((skill) => jobText.includes(skill))
+      .slice(0, 8)
+      .map((skill) => ({
+        skill: this.toDisplayCase(skill),
+        matched: profileSkills.has(skill),
+        weight: this.preferredSkillWeight(skill),
+      }));
+  }
+
+  private calculatePreferredRequirementScore(requirements: PreferredRequirementMatch[]): number {
+    if (requirements.length === 0) {
+      return 70;
+    }
+
+    const totalWeight = requirements.reduce((sum, item) => sum + item.weight, 0);
+    const matchedWeight = requirements
+      .filter((item) => item.matched)
+      .reduce((sum, item) => sum + item.weight, 0);
+
+    return Math.round((matchedWeight / totalWeight) * 100);
+  }
+
+  private preferredSkillWeight(skill: string): number {
+    if (["java", "python", "typescript", "node"].includes(skill)) {
+      return 25;
+    }
+    if (["react", "spring boot", "spring", "graphql"].includes(skill)) {
+      return 20;
+    }
+    if (["aws", "docker", "kubernetes"].includes(skill)) {
+      return 15;
+    }
+    return 10;
+  }
+
   private extractRequiredYearsOfExperience(jobText: string): number {
     const patterns = [
       /(\d+)\s*\+?\s*(?:years|yrs|year)\b/i,
@@ -505,6 +695,52 @@ Return JSON only:
       }
     }
     return 0;
+  }
+
+  private extractRequiredBatchYears(jobText: string): number[] {
+    const matches = jobText.match(/\b20(2[4-9]|3[0-2])\b/g) || [];
+    const batchContext = /\b(batch|graduate|graduation|class of|passing out|passout)\b/i.test(jobText);
+    if (!batchContext) {
+      return [];
+    }
+
+    return [...new Set(matches.map((year) => Number.parseInt(year, 10)))];
+  }
+
+  private extractRequiredBranches(jobText: string): string[] {
+    const branches: Array<{ key: string; patterns: RegExp[] }> = [
+      { key: "computer science", patterns: [/\bcse\b/i, /computer science/i] },
+      { key: "information technology", patterns: [/\bit\b/i, /information technology/i] },
+      { key: "electronics", patterns: [/\bece\b/i, /electronics/i] },
+      { key: "electrical", patterns: [/\beee\b/i, /electrical/i] },
+      { key: "data science", patterns: [/data science/i] },
+    ];
+
+    return branches
+      .filter((branch) => branch.patterns.some((pattern) => pattern.test(jobText)))
+      .map((branch) => branch.key);
+  }
+
+  private matchesLocationRequirement(
+    preferredLocation: string | null | undefined,
+    jobLocation: string,
+    jobText: string,
+  ): boolean {
+    const normalizedJobLocation = jobLocation.toLowerCase();
+    if (!normalizedJobLocation || normalizedJobLocation.includes("remote")) {
+      return true;
+    }
+
+    const strictLocation = /\b(on-site|onsite|hybrid|relocation required|must be located|based in)\b/i.test(jobText);
+    if (!strictLocation) {
+      return true;
+    }
+
+    if (!preferredLocation) {
+      return false;
+    }
+
+    return normalizedJobLocation.includes(preferredLocation.toLowerCase());
   }
 
   private isSeniorRoleFromTitle(title: string): boolean {
@@ -559,7 +795,17 @@ Return JSON only:
     let total = 0;
     if (Array.isArray(profile.experience)) {
       for (const exp of profile.experience) {
-        const years = Number(exp.years);
+        const expAny = exp as any;
+        let years = Number(expAny.years);
+        if (isNaN(years) && expAny.startYear) {
+          const startMonth = Number(expAny.startMonth) || 1;
+          const startYear = Number(expAny.startYear);
+          const current = !!expAny.current;
+          const endYear = current ? new Date().getFullYear() : (Number(expAny.endYear) || startYear);
+          const endMonth = current ? (new Date().getMonth() + 1) : (Number(expAny.endMonth) || startMonth);
+          const months = (endYear - startYear) * 12 + (endMonth - startMonth);
+          years = months > 0 ? Math.round((months / 12) * 100) / 100 : 0;
+        }
         if (!isNaN(years) && years > 0) {
           total += years;
         }
@@ -584,13 +830,72 @@ Return JSON only:
     return {
       id: row.id,
       userId: row.user_id,
+      personal: row.personal && typeof row.personal === "object"
+        ? row.personal
+        : { name: "", email: "", phone: "", location: "" },
+      summary: typeof row.summary === "string" ? row.summary : "",
       skills: Array.isArray(row.skills) ? row.skills : [],
       experience: Array.isArray(row.experience) ? row.experience : [],
       education: Array.isArray(row.education) ? row.education : [],
+      certifications: Array.isArray(row.certifications) ? row.certifications : [],
       projects: Array.isArray(row.projects) ? row.projects : [],
+      achievements: Array.isArray(row.achievements) ? row.achievements : [],
+      publications: Array.isArray(row.publications) ? row.publications : [],
+      languages: Array.isArray(row.languages) ? row.languages : [],
+      preferredRoles: Array.isArray(row.preferred_roles) ? row.preferred_roles : [],
+      preferredIndustries: Array.isArray(row.preferred_industries) ? row.preferred_industries : [],
+      workAuthorization: typeof row.work_authorization === "string" ? row.work_authorization : "",
+      totalExperienceYears: Number(row.total_experience_years) || this.getCandidateExperienceYears({
+        id: row.id,
+        userId: row.user_id,
+        personal: { name: "", email: "", phone: "", location: "" },
+        summary: "",
+        skills: [],
+        experience: Array.isArray(row.experience) ? row.experience : [],
+        education: [],
+        certifications: [],
+        projects: [],
+        achievements: [],
+        publications: [],
+        languages: [],
+        preferredRoles: [],
+        preferredIndustries: [],
+        workAuthorization: "",
+        totalExperienceYears: 0,
+        currentRole: "",
+        currentCompany: "",
+        careerStage: "New Graduate",
+      }),
+      currentRole: typeof row.current_role === "string" ? row.current_role : "",
+      currentCompany: typeof row.current_company === "string" ? row.current_company : "",
+      careerStage: this.toCareerStage(row.career_stage),
       preferredLocation: row.preferred_location,
       createdAt: row.created_at?.toISOString?.() ?? String(row.created_at ?? ""),
     };
+  }
+
+  private toCareerStage(value: unknown): CandidateProfileRecord["careerStage"] {
+    const allowed: Array<CandidateProfileRecord["careerStage"]> = [
+      "Student",
+      "Intern",
+      "New Graduate",
+      "Entry Level",
+      "Mid Level",
+      "Senior",
+      "Lead",
+      "Manager",
+      "Executive",
+      "Career Switcher",
+    ];
+
+    if (typeof value === "string") {
+      const match = allowed.find((stage) => stage.toLowerCase() === value.toLowerCase());
+      if (match) {
+        return match;
+      }
+    }
+
+    return "New Graduate";
   }
 
   private toDisplayCase(skill: string): string {

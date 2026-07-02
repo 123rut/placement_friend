@@ -8,6 +8,7 @@ import {
   UploadedFile,
   UseInterceptors,
   Body,
+  Put,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { CandidateProfileRecord } from "../careerpilot.types";
@@ -45,6 +46,25 @@ export class ResumeController {
         experienceRoles: profile.experience.length,
         profile,
       };
+    } catch (error) {
+      throw new InternalServerErrorException(this.toResumeErrorMessage(error));
+    }
+  }
+
+  /**
+   * PUT /api/resume/:userId
+   * Manually update stored candidate profile experience.
+   */
+  @Put(":userId")
+  async updateExperience(
+    @Param("userId") userId: string,
+    @Body("experience") experience: any[]
+  ): Promise<CandidateProfileRecord | { error: string }> {
+    if (!userId) throw new BadRequestException("userId is required");
+    if (!Array.isArray(experience)) throw new BadRequestException("experience array is required");
+
+    try {
+      return await this.resumeService.updateExperience(userId, experience);
     } catch (error) {
       throw new InternalServerErrorException(this.toResumeErrorMessage(error));
     }

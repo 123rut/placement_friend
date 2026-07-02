@@ -423,7 +423,16 @@ export class SyncService {
     let candidateYears = 0;
     if (studentProfile && Array.isArray(studentProfile.experience)) {
       for (const exp of studentProfile.experience) {
-        const years = Number(exp.years);
+        let years = Number(exp.years);
+        if (isNaN(years) && exp.startYear) {
+          const startMonth = Number(exp.startMonth) || 1;
+          const startYear = Number(exp.startYear);
+          const current = !!exp.current;
+          const endYear = current ? new Date().getFullYear() : (Number(exp.endYear) || startYear);
+          const endMonth = current ? (new Date().getMonth() + 1) : (Number(exp.endMonth) || startMonth);
+          const months = (endYear - startYear) * 12 + (endMonth - startMonth);
+          years = months > 0 ? Math.round((months / 12) * 100) / 100 : 0;
+        }
         if (!isNaN(years) && years > 0) {
           candidateYears += years;
         }

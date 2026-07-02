@@ -12,7 +12,7 @@ async function testUpload() {
   form.append("userId", userId);
 
   try {
-    const res = await fetch("http://127.0.0.1:4002/api/resume/parse", {
+    const res = await fetch("http://127.0.0.1:4000/api/resume/parse", {
       method: "POST",
       body: form
     });

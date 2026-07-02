@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "../../../../lib/supabase/server";
 import { getCareerPilotApiBaseUrl } from "../_lib";
 
+export const dynamic = "force-dynamic";
+
 async function readUpstreamBody(response: Response) {
   const text = await response.text();
   if (!text) {

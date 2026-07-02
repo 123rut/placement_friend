@@ -254,7 +254,7 @@ Rules: only specific roles (e.g. "SWE Intern"), not categories. applyUrl must be
         .slice(0, 6000);
       const prompt = `Company: ${companyId}\n\n${compactText}`;
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiApiKey}`;
       await rateLimitGemini();
       const response = await fetchWithTimeout(url, {
         method: "POST",

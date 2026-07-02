@@ -51,12 +51,40 @@ CREATE TABLE IF NOT EXISTS candidate_profiles (
   experience          JSONB DEFAULT '[]',         -- [{company, role, years, description}]
   education           JSONB DEFAULT '[]',         -- [{degree, branch, college, year}]
   projects            JSONB DEFAULT '[]',         -- [{name, tech[], description}]
+  personal            JSONB DEFAULT '{}',
+  summary             TEXT DEFAULT '',
+  certifications      JSONB DEFAULT '[]',
+  achievements        JSONB DEFAULT '[]',
+  publications        JSONB DEFAULT '[]',
+  languages           TEXT[] DEFAULT '{}',
+  preferred_roles     TEXT[] DEFAULT '{}',
+  preferred_industries TEXT[] DEFAULT '{}',
+  work_authorization  TEXT DEFAULT '',
+  total_experience_years FLOAT DEFAULT 0,
+  "current_role"      TEXT DEFAULT '',
+  current_company     TEXT DEFAULT '',
+  career_stage        TEXT DEFAULT 'New Graduate',
   preferred_location  TEXT,
   expected_ctc        INTEGER,
   embedding           VECTOR(768),               -- Gemini embedding of full profile
   created_at          TIMESTAMPTZ DEFAULT NOW(),
   updated_at          TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE candidate_profiles
+  ADD COLUMN IF NOT EXISTS personal             JSONB DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS summary              TEXT DEFAULT '',
+  ADD COLUMN IF NOT EXISTS certifications       JSONB DEFAULT '[]',
+  ADD COLUMN IF NOT EXISTS achievements         JSONB DEFAULT '[]',
+  ADD COLUMN IF NOT EXISTS publications         JSONB DEFAULT '[]',
+  ADD COLUMN IF NOT EXISTS languages            TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS preferred_roles      TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS preferred_industries TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS work_authorization   TEXT DEFAULT '',
+  ADD COLUMN IF NOT EXISTS total_experience_years FLOAT DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "current_role"       TEXT DEFAULT '',
+  ADD COLUMN IF NOT EXISTS current_company      TEXT DEFAULT '',
+  ADD COLUMN IF NOT EXISTS career_stage         TEXT DEFAULT 'New Graduate';
 
 CREATE INDEX IF NOT EXISTS profiles_user_id_idx ON candidate_profiles(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS profiles_user_id_unique_idx ON candidate_profiles(user_id);

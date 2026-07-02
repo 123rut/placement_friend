@@ -1,18 +1,32 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Pool } from "pg";
-import { AgentChatResponse, CandidateProfileRecord, ConversationMessage, JobMatchResult } from "../careerpilot.types";
+import { AgentChatResponse, ConversationMessage } from "../careerpilot.types";
 import { DB_POOL } from "../db/db.module";
 import { JobsService } from "../jobs/jobs.service";
 import { ResumeService } from "../resume/resume.service";
 import { fetchWithRetry } from "../utils/fetch-retry";
 import { fetchGroqWithRotation } from "../utils/groq-keys";
 
-const TOOLS = [
+type AgentToolDefinition = {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+};
+
+type AgentTool = {
+  definition: AgentToolDefinition;
+  execute: (args: Record<string, unknown>, userId: string) => Promise<unknown>;
+};
+
+const TOOL_DEFINITIONS: AgentToolDefinition[] = [
   {
     type: "function",
     function: {
       name: "read_resume",
-      description: "Read the candidate profile from the database. Always call this first.",
+      description: "Read the candidate profile from the database. Use only when the user's profile, resume, experience, goals, or saved preferences are needed.",
       parameters: {
         type: "object",
         properties: {
@@ -80,12 +94,16 @@ Voice:
 - Avoid exposing internal tool names, endpoint names, raw JSON, or implementation details.
 
 Workflow rules:
-1. Always call read_resume before search_jobs or compute_match.
-2. If the user asks how to prepare, improve, learn, roadmap, resume tips, or interview advice, answer from the resume first. Do not force a job search.
-3. For job-finding requests, search for relevant jobs, then compute_match for the strongest options.
-4. Be specific about strengths, gaps, and next steps.
-5. Keep answers practical and concise.
-6. If no profile or jobs are available, explain the missing step in plain language.`;
+1. Decide whether tools are needed from the user's actual intent. Do not run a fixed pipeline.
+2. For general technical questions, explanations, definitions, and casual conversation, answer directly without tools.
+3. Use read_resume only when the user's profile is needed, such as resume review, career advice, personalized preparation, skill gaps, or job fit.
+4. Use search_jobs only when the user is actually looking for jobs or opportunities.
+5. Use compute_match only after search_jobs returns candidate jobs or the user gives a specific job id.
+6. Use get_skill_gap only when the user asks about gaps, roadmaps, improvement, or after evaluating a specific target role.
+7. After tool results, continue reasoning and either call another useful tool or produce the final answer.
+8. Keep answers practical, concise, and specific.
+9. If a tool returns null or an error, explain the missing prerequisite and continue helpfully instead of pretending the tool succeeded.
+10. Never say that you searched jobs, scored matches, or read a resume unless a tool result in the conversation shows that happened.`;
 
 @Injectable()
 export class AgentService {
@@ -95,6 +113,30 @@ export class AgentService {
     private readonly resumeService: ResumeService,
   ) {}
 
+  private readonly tools: Record<string, AgentTool> = {
+    read_resume: {
+      definition: TOOL_DEFINITIONS[0],
+      execute: async (_args, userId) => this.resumeService.getProfile(userId),
+    },
+    search_jobs: {
+      definition: TOOL_DEFINITIONS[1],
+      execute: async (args) =>
+        this.jobsService.searchJobs(String(args.query || ""), {
+          location: typeof args.location === "string" ? args.location : undefined,
+          employmentType: typeof args.employmentType === "string" ? args.employmentType : undefined,
+          limit: typeof args.limit === "number" ? args.limit : 5,
+        }),
+    },
+    compute_match: {
+      definition: TOOL_DEFINITIONS[2],
+      execute: async (args, userId) => this.jobsService.matchJobToProfile(String(args.jobId || ""), userId),
+    },
+    get_skill_gap: {
+      definition: TOOL_DEFINITIONS[3],
+      execute: async (args, userId) => this.jobsService.analyzeSkillGap(userId, String(args.targetRole || "")),
+    },
+  };
+
   async chat(userId: string, userMessage: string, conversationId?: string): Promise<AgentChatResponse> {
     const conversation = await this.loadOrCreateConversation(userId, conversationId);
     const messages = [...conversation.messages];
@@ -102,15 +144,17 @@ export class AgentService {
 
     let reply: { reply: string; toolsUsed: string[] };
     try {
-      if (process.env.GROQ_API_KEY) {
+      const mode = process.env.CAREERPILOT_AGENT_MODE || "llm";
+      if (mode === "llm" && (process.env.GROQ_API_KEY || process.env.GROQ_API_KEY_2 || process.env.GROQ_API_KEY_3)) {
         reply = await this.runGroqPlanner(userId, userMessage, messages);
-      } else if (process.env.GEMINI_API_KEY) {
+      } else if (mode === "llm" && process.env.GEMINI_API_KEY) {
         reply = await this.runGeminiPlanner(userId, userMessage, messages);
       } else {
-        reply = await this.runDeterministicPlanner(userId, userMessage);
+        reply = this.runNoToolFallback(userMessage);
       }
-    } catch {
-      reply = await this.runDeterministicPlanner(userId, userMessage);
+    } catch (err) {
+      console.error("Agent planner error, falling back to no-tool response:", err);
+      reply = this.runNoToolFallback(userMessage);
     }
 
     messages.push({ role: "assistant", content: reply.reply, timestamp: new Date().toISOString() });
@@ -143,7 +187,7 @@ export class AgentService {
   ): Promise<{ reply: string; toolsUsed: string[] }> {
     const hasGroqKeys = !!(process.env.GROQ_API_KEY || process.env.GROQ_API_KEY_2 || process.env.GROQ_API_KEY_3);
     if (!hasGroqKeys) {
-      return this.runDeterministicPlanner(userId, userMessage);
+      return this.runBackupPlanner(userId, userMessage, history);
     }
 
     const groqMessages: Array<Record<string, unknown>> = [
@@ -160,7 +204,7 @@ export class AgentService {
         const body = JSON.stringify({
           model: "llama-3.3-70b-versatile",
           messages: groqMessages,
-          tools: TOOLS,
+          tools: this.getToolDefinitions(),
           tool_choice: "auto",
           temperature: 0.2,
           max_tokens: 1800,
@@ -169,13 +213,14 @@ export class AgentService {
         const response = await fetchGroqWithRotation(body, AbortSignal.timeout(30000));
 
         if (!response.ok) {
-          return this.runDeterministicPlanner(userId, userMessage);
+          console.warn(`[CareerPilot Agent] Groq planner returned HTTP ${response.status}; trying backup planner.`);
+          return this.runBackupPlanner(userId, userMessage, history);
         }
 
         const data = await response.json();
         const message = data.choices?.[0]?.message;
         if (!message) {
-          break;
+          return this.generateGroqFinalAnswer(groqMessages, toolsUsed);
         }
 
         groqMessages.push(message);
@@ -189,7 +234,7 @@ export class AgentService {
 
         for (const toolCall of message.tool_calls) {
           const toolName = toolCall.function?.name as string;
-          const args = JSON.parse(toolCall.function?.arguments || "{}");
+          const args = this.parseToolArgs(toolCall.function?.arguments);
           const result = await this.executeTool(toolName, args, userId);
           toolsUsed.push(toolName);
           groqMessages.push({
@@ -200,9 +245,14 @@ export class AgentService {
         }
       }
 
-      return this.runDeterministicPlanner(userId, userMessage);
-    } catch {
-      return this.runDeterministicPlanner(userId, userMessage);
+      return this.generateGroqFinalAnswer(groqMessages, toolsUsed);
+    } catch (error) {
+      console.warn(
+        `[CareerPilot Agent] Groq planner failed; trying backup planner: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return this.runBackupPlanner(userId, userMessage, history);
     }
   }
 
@@ -213,217 +263,291 @@ export class AgentService {
   ): Promise<{ reply: string; toolsUsed: string[] }> {
     const key = process.env.GEMINI_API_KEY;
     if (!key) {
-      return this.runDeterministicPlanner(userId, userMessage);
+      return this.runNoToolFallback(userMessage);
     }
 
-    const profile = await this.resumeService.getProfile(userId);
-    const inferredLocation = this.extractLocation(userMessage) || (profile ? profile.preferredLocation : undefined);
-    const jobs = await this.jobsService.searchJobs(userMessage, {
-      location: inferredLocation || undefined,
-      employmentType: this.extractEmploymentType(userMessage),
-      limit: 5,
-    });
+    const plannerMessages: Array<{ role: string; content: string }> = history.map((message) => ({
+      role: message.role,
+      content: message.content,
+    }));
+    const toolsUsed: string[] = [];
 
-    const matchResults: JobMatchResult[] = [];
-    const toolsUsed = ["read_resume"];
-    if (jobs.length > 0) {
-      toolsUsed.push("search_jobs");
+    try {
+      for (let iteration = 0; iteration < 6; iteration += 1) {
+        const prompt = this.buildGeminiPlannerPrompt(plannerMessages);
+        const response = await fetchWithRetry(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                responseMimeType: "application/json",
+              },
+            }),
+            signal: AbortSignal.timeout(30000),
+          },
+        );
+
+        if (!response.ok) {
+          return this.generateGeminiFinalAnswer(plannerMessages, toolsUsed);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) {
+          return this.generateGeminiFinalAnswer(plannerMessages, toolsUsed);
+        }
+
+        const decision = this.parsePlannerDecision(text);
+        if (decision.final) {
+          return {
+            reply: decision.final,
+            toolsUsed,
+          };
+        }
+
+        if (!decision.tool) {
+          return this.generateGeminiFinalAnswer(plannerMessages, toolsUsed);
+        }
+
+        const result = await this.executeTool(decision.tool.name, decision.tool.args || {}, userId);
+        toolsUsed.push(decision.tool.name);
+        plannerMessages.push({
+          role: "assistant",
+          content: JSON.stringify({ tool: decision.tool }),
+        });
+        plannerMessages.push({
+          role: "tool",
+          content: JSON.stringify({ tool: decision.tool.name, result }),
+        });
+      }
+
+      return this.generateGeminiFinalAnswer(plannerMessages, toolsUsed);
+    } catch {
+      return this.runNoToolFallback(userMessage);
+    }
+  }
+
+  private async runBackupPlanner(
+    userId: string,
+    userMessage: string,
+    history: ConversationMessage[],
+  ): Promise<{ reply: string; toolsUsed: string[] }> {
+    if (process.env.GEMINI_API_KEY) {
+      return this.runGeminiPlanner(userId, userMessage, history);
     }
 
-    if (profile && jobs.length > 0) {
-      for (const job of jobs.slice(0, 3)) {
-        const match = await this.jobsService.matchJobToProfile(job.id, userId);
-        if (!("error" in match)) {
-          matchResults.push(match);
+    return this.runNoToolFallback(userMessage);
+  }
+
+  private async generateGroqFinalAnswer(
+    messages: Array<Record<string, unknown>>,
+    toolsUsed: string[],
+  ): Promise<{ reply: string; toolsUsed: string[] }> {
+    try {
+      const finalMessages = [
+        ...messages,
+        {
+          role: "user",
+          content:
+            "Stop calling tools now. Write the best final answer for the user using only the conversation and tool results already available. If something is missing, say what is missing briefly and give the next useful step.",
+        },
+      ];
+
+      const body = JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: finalMessages,
+        temperature: 0.2,
+        max_tokens: 1200,
+      });
+
+      const response = await fetchGroqWithRotation(body, AbortSignal.timeout(20000), 1);
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (typeof content === "string" && content.trim()) {
+          return { reply: content.trim(), toolsUsed };
         }
       }
-      if (matchResults.length > 0) {
-        toolsUsed.push("compute_match");
-      }
+    } catch (error) {
+      console.warn(
+        `[CareerPilot Agent] Groq final-answer synthesis failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
 
-    let skillGap: any = null;
-    if (profile && matchResults.length > 0) {
-      const topTarget = matchResults[0]?.jobTitle || jobs[0].title;
-      skillGap = await this.jobsService.analyzeSkillGap(userId, topTarget);
-      if (skillGap) {
-        toolsUsed.push("get_skill_gap");
-      }
+    return this.runNoToolFallback("");
+  }
+
+  private async generateGeminiFinalAnswer(
+    messages: Array<{ role: string; content: string }>,
+    toolsUsed: string[],
+  ): Promise<{ reply: string; toolsUsed: string[] }> {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      return this.runNoToolFallback("");
     }
 
-    const contextLines = [
-      `User Profile: ${profile ? JSON.stringify({
-        skills: profile.skills,
-        preferredLocation: profile.preferredLocation,
-        experience: profile.experience?.map(e => ({ company: e.company, role: e.role, description: e.description })),
-        projects: profile.projects?.map(p => ({ name: p.name, tech: p.tech, description: p.description }))
-      }) : "No resume/profile uploaded yet."}`,
-      `Searched Jobs Context: ${JSON.stringify(jobs.map(j => ({ id: j.id, title: j.title, company: j.company_name, location: j.location })))}`,
-      `Job Match Analysis (Resume Match Scores): ${JSON.stringify(matchResults.map(m => ({ jobTitle: m.jobTitle, company: m.company, matchScore: m.matchScore, strengths: m.strengths, missingSkills: m.missingSkills })))}`,
-      `Skill Gap Roadmap: ${skillGap ? JSON.stringify(skillGap) : "None"}`
-    ];
-
-    const formattedHistory = history.map(m => `${m.role === "user" ? "Candidate" : "CareerPilot"}: ${m.content}`).join("\n");
-
-    const prompt = `You are CareerPilot, an AI career assistant for software engineers.
-
-Voice:
-- Sound like a thoughtful career coach, not a database report.
-- Use natural, encouraging language without overpromising.
-- Start with the user's situation, then give the best options and next step.
-- Avoid exposing internal tool names, endpoint names, raw JSON, or implementation details.
-
-Workflow rules:
-1. Answer questions based on the candidate's resume and job matches.
-2. If the user asks how to prepare, improve, learn, roadmap, resume tips, or interview advice, base your response on the candidate's actual profile details.
-3. Be specific about strengths, gaps, and next steps.
-4. Keep answers practical, concise, and structured.
-
-Candidate Database Context:
-${contextLines.join("\n\n")}
-
-Conversation History:
-${formattedHistory}
-
-CareerPilot:`;
+    const formattedMessages = messages
+      .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+      .join("\n\n");
 
     try {
       const response = await fetchWithRetry(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [
               {
                 parts: [
                   {
-                    text: prompt,
+                    text: `${SYSTEM_PROMPT}
+
+The tool-planning loop has already run. Do not request another tool. Write the final answer for the user using only this conversation and tool context. If required information is missing, say that briefly and give the next useful step.
+
+Conversation and tool context:
+${formattedMessages}`,
                   },
                 ],
               },
             ],
           }),
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(20000),
         },
+        1,
       );
 
-      if (!response.ok) {
-        return this.runDeterministicPlanner(userId, userMessage);
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (typeof content === "string" && content.trim()) {
+          return { reply: content.trim(), toolsUsed };
+        }
       }
-
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) {
-        return this.runDeterministicPlanner(userId, userMessage);
-      }
-
-      return {
-        reply: text.trim(),
-        toolsUsed,
-      };
-    } catch {
-      return this.runDeterministicPlanner(userId, userMessage);
+    } catch (error) {
+      console.warn(
+        `[CareerPilot Agent] Gemini final-answer synthesis failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
+
+    return this.runNoToolFallback("");
   }
 
-  private async runDeterministicPlanner(
-    userId: string,
-    userMessage: string,
-  ): Promise<{ reply: string; toolsUsed: string[] }> {
-    const profile = await this.resumeService.getProfile(userId);
-    if (!profile) {
-      return {
-        reply:
-          "I can help with that, but I need your resume first so I can understand your skills and experience. Upload it in the CareerPilot panel, then ask me again and I will rank the best roles for you.",
-        toolsUsed: ["read_resume"],
+  private buildGeminiPlannerPrompt(messages: Array<{ role: string; content: string }>): string {
+    const formattedMessages = messages
+      .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+      .join("\n\n");
+
+    return `${SYSTEM_PROMPT}
+
+Available tools:
+${JSON.stringify(this.getToolDefinitions().map((tool) => tool.function), null, 2)}
+
+You are controlling a tool-using agent. Decide the next step.
+
+Return JSON only in one of these shapes:
+
+To call a tool:
+{
+  "tool": {
+    "name": "read_resume",
+    "args": { "userId": "${"{userId}"}" }
+  }
+}
+
+To answer the user:
+{
+  "final": "Natural language answer to the user."
+}
+
+Important:
+- Do not call tools for general technical explanations, definitions, or casual chat.
+- Use only one tool call per JSON response.
+- Use the exact userId only if a tool requires it; the backend will also fill it safely.
+- Do not expose JSON, tool names, or implementation details in final answers.
+
+Conversation and tool context:
+${formattedMessages}`;
+  }
+
+  private parsePlannerDecision(text: string): {
+    final?: string;
+    tool?: { name: string; args?: Record<string, unknown> };
+  } {
+    try {
+      const parsed = JSON.parse(text) as {
+        final?: unknown;
+        tool?: { name?: unknown; args?: unknown };
       };
-    }
 
-    if (this.isPreparationQuestion(userMessage)) {
-      return {
-        reply: this.buildPreparationReply(profile, userMessage),
-        toolsUsed: ["read_resume"],
-      };
-    }
-
-    const inferredLocation = this.extractLocation(userMessage) || profile.preferredLocation || undefined;
-    const jobs = await this.jobsService.searchJobs(userMessage, {
-      location: inferredLocation || undefined,
-      employmentType: this.extractEmploymentType(userMessage),
-      limit: 3,
-    });
-
-    if (jobs.length === 0) {
-      return {
-        reply:
-          `I checked your profile, but I do not see good matches in the saved job cache yet${inferredLocation ? ` for ${inferredLocation}` : ""}. Try syncing the job cache first, then ask for a role and location like "backend jobs in Bangalore" so I can compare real openings against your resume.`,
-        toolsUsed: ["read_resume", "search_jobs"],
-      };
-    }
-
-    const matchResults: JobMatchResult[] = [];
-    for (const job of jobs.slice(0, 3)) {
-      const match = await this.jobsService.matchJobToProfile(job.id, userId);
-      if ("error" in match) {
-        continue;
+      if (typeof parsed.final === "string" && parsed.final.trim()) {
+        return { final: parsed.final.trim() };
       }
-      matchResults.push(match);
+
+      if (parsed.tool && typeof parsed.tool.name === "string") {
+        return {
+          tool: {
+            name: parsed.tool.name,
+            args:
+              parsed.tool.args && typeof parsed.tool.args === "object" && !Array.isArray(parsed.tool.args)
+                ? parsed.tool.args as Record<string, unknown>
+                : {},
+          },
+        };
+      }
+    } catch {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return this.parsePlannerDecision(jsonMatch[0]);
+      }
     }
 
-    const topTarget = matchResults[0]?.jobTitle || jobs[0].title;
-    const skillGap = await this.jobsService.analyzeSkillGap(userId, topTarget);
-    const missingSkills =
-      "missingSkills" in skillGap && Array.isArray(skillGap.missingSkills)
-        ? skillGap.missingSkills.slice(0, 3).filter((skill): skill is string => typeof skill === "string")
-        : [];
-    const matchedSkillPreview = profile.skills.slice(0, 4).join(", ");
-    const locationText = inferredLocation ? ` near ${inferredLocation}` : "";
-    const bestMatches = matchResults.length > 0 ? matchResults : [];
-
-    const replyLines = [
-      `I found a few roles that look worth your time${locationText}. Based on your resume${matchedSkillPreview ? `, especially ${matchedSkillPreview}` : ""}, these are the strongest bets right now:`,
-      "",
-      ...bestMatches.map((match, index) => {
-        const strengths = match.strengths.length ? ` Your edge: ${match.strengths.slice(0, 3).join(", ")}.` : "";
-        const gaps = match.missingSkills.length
-          ? ` Before applying, brush up on ${match.missingSkills.slice(0, 2).join(" and ")}.`
-          : " I do not see any major skill gaps from the saved description.";
-        return `${index + 1}. ${match.jobTitle} at ${match.company} - ${match.matchScore}% fit.${strengths} ${gaps}`;
-      }),
-      "",
-      missingSkills.length
-        ? `My suggested next move: spend a little time tightening ${missingSkills.join(", ")} in your resume or project examples, then apply to the top match first.`
-        : "My suggested next move: apply to the top match first, and tailor your resume summary to mirror the role title and the strongest matching skills.",
-    ];
-
-    return {
-      reply: replyLines.join("\n").replace(/\n{3,}/g, "\n\n"),
-      toolsUsed: ["read_resume", "search_jobs", "compute_match", "get_skill_gap"],
-    };
+    return {};
   }
 
   private async executeTool(name: string, args: Record<string, unknown>, userId: string): Promise<unknown> {
-    const resolvedUserId = String(args.userId || userId);
-
-    switch (name) {
-      case "read_resume":
-        return this.resumeService.getProfile(resolvedUserId);
-      case "search_jobs":
-        return this.jobsService.searchJobs(String(args.query || ""), {
-          location: typeof args.location === "string" ? args.location : undefined,
-          employmentType: typeof args.employmentType === "string" ? args.employmentType : undefined,
-          limit: typeof args.limit === "number" ? args.limit : 5,
-        });
-      case "compute_match":
-        return this.jobsService.matchJobToProfile(String(args.jobId || ""), resolvedUserId);
-      case "get_skill_gap":
-        return this.jobsService.analyzeSkillGap(resolvedUserId, String(args.targetRole || ""));
-      default:
-        return { error: `Unknown tool: ${name}` };
+    const tool = this.tools[name];
+    if (!tool) {
+      return { error: `Unknown tool: ${name}` };
     }
+
+    return tool.execute(args, userId);
+  }
+
+  private getToolDefinitions(): AgentToolDefinition[] {
+    return Object.values(this.tools).map((tool) => tool.definition);
+  }
+
+  private parseToolArgs(rawArgs: unknown): Record<string, unknown> {
+    if (typeof rawArgs !== "string" || !rawArgs.trim()) {
+      return {};
+    }
+
+    try {
+      const parsed = JSON.parse(rawArgs);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private runNoToolFallback(userMessage: string): { reply: string; toolsUsed: string[] } {
+    return {
+      reply:
+        "I am having trouble reaching the AI planner right now. Please try again in a moment; if it keeps happening, check the API logs for the Groq/Gemini error.",
+      toolsUsed: [],
+    };
   }
 
   private async loadOrCreateConversation(userId: string, conversationId?: string): Promise<{
@@ -475,78 +599,5 @@ CareerPilot:`;
   private buildConversationTitle(messages: ConversationMessage[]): string {
     const firstUserMessage = messages.find((message) => message.role === "user")?.content || "Career chat";
     return firstUserMessage.slice(0, 60);
-  }
-
-  private isPreparationQuestion(message: string): boolean {
-    return /\b(prepare|preparation|roadmap|learn|improve|practice|interview|resume|cv|project|skill|skills|gap|ready)\b/i.test(
-      message,
-    );
-  }
-
-  private buildPreparationReply(profile: CandidateProfileRecord, userMessage: string): string {
-    const targetRole = this.extractTargetRole(userMessage);
-    const skills = profile.skills.slice(0, 6);
-    const experienceCount = profile.experience.length;
-    const projectCount = profile.projects.length;
-    const skillText = skills.length ? skills.join(", ") : "the skills already present in your resume";
-    const roleText = targetRole ? ` for ${targetRole}` : "";
-
-    const projectAdvice =
-      projectCount > 0
-        ? "Pick your strongest project and rewrite it around impact: problem, tech choices, measurable result, and what you personally owned."
-        : "Add one solid project that matches your target role. Keep it practical: a real user flow, database, authentication, tests, and a short deployment link.";
-
-    const experienceAdvice =
-      experienceCount > 0
-        ? "Turn each experience bullet into outcome language: what you built, scale or users, and the result."
-        : "Since your resume does not show much experience yet, let projects do the heavy lifting. Make them specific enough that an interviewer can ask deep questions.";
-
-    return [
-      `Yes. You can prepare${roleText} without waiting for the job cache. From your resume, I would build around ${skillText}.`,
-      "",
-      `1. Strengthen the resume story. ${experienceAdvice}`,
-      `2. Sharpen one proof project. ${projectAdvice}`,
-      "3. Practice interviews in layers: first explain your project clearly, then review core CS/DSA, then practice role-specific system design or API/database questions.",
-      "4. Apply with a small routine: shortlist roles, tailor the top 4-5 resume lines to each JD, and track what skill each rejection or interview is asking for.",
-      "",
-      "For the next 7 days: spend 2 days polishing the resume, 3 days improving one project, and 2 days doing mock interview questions from your target role. After that, sync jobs and I can rank real openings against your profile.",
-    ].join("\n");
-  }
-
-  private extractTargetRole(message: string): string | null {
-    const lower = message.toLowerCase();
-    const roles = [
-      "backend engineer",
-      "frontend engineer",
-      "full stack engineer",
-      "software engineer",
-      "data analyst",
-      "data scientist",
-      "devops engineer",
-      "machine learning engineer",
-      "internship",
-    ];
-    return roles.find((role) => lower.includes(role)) || null;
-  }
-
-  private extractLocation(message: string): string | null {
-    const cities = ["bangalore", "bengaluru", "mumbai", "pune", "hyderabad", "chennai", "delhi", "gurgaon"];
-    const lower = message.toLowerCase();
-    const match = cities.find((city) => lower.includes(city));
-    if (!match) {
-      return null;
-    }
-    return match === "bengaluru" ? "Bangalore" : match[0].toUpperCase() + match.slice(1);
-  }
-
-  private extractEmploymentType(message: string): string | undefined {
-    const lower = message.toLowerCase();
-    if (lower.includes("intern")) {
-      return "internship";
-    }
-    if (lower.includes("contract")) {
-      return "contract";
-    }
-    return undefined;
   }
 }

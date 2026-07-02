@@ -36,11 +36,16 @@ interface JobMatchResult {
   jobId: string;
   jobTitle: string;
   company: string;
-  matchScore: number;
+  eligible?: boolean;
+  matchScore: number | null;
   vectorSimilarity: number | null;
   explanation: string;
   strengths: string[];
   missingSkills: string[];
+  hardRequirements?: Array<{ label: string; passed: boolean; detail: string }>;
+  preferredRequirements?: Array<{ skill: string; matched: boolean; weight: number }>;
+  recommendation?: string;
+  rejectionReasons?: string[];
   applyUrl: string;
   error?: string;
 }
@@ -84,10 +89,15 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
             jobTitle: item.title,
             company: item.company_name,
             matchScore: item.match_score,
+            eligible: true,
             vectorSimilarity: null,
             explanation: item.explanation,
             strengths: Array.isArray(item.strengths) ? item.strengths : [],
             missingSkills: Array.isArray(item.missing_skills) ? item.missing_skills : [],
+            hardRequirements: [],
+            preferredRequirements: [],
+            recommendation: "",
+            rejectionReasons: [],
             applyUrl: item.url,
           })),
         );
@@ -100,7 +110,7 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
   const loadProfile = async () => {
     setLoadingProfile(true);
     try {
-      const res = await fetch("/api/careerpilot/resume");
+      const res = await fetch(`/api/careerpilot/resume?t=${Date.now()}`);
       const data = await res.json();
       if (res.ok && !data.error) {
         setProfile(data);
@@ -178,6 +188,8 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
       } else {
         setAgentReply(data.reply || "");
         setConversationId(data.conversationId);
+        await loadTopMatches();
+        await onSyncComplete?.();
       }
     } catch {
       setError("Agent request failed.");
@@ -263,6 +275,7 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
         const withoutCurrent = current.filter((item) => item.jobId !== data.jobId);
         return [data, ...withoutCurrent].slice(0, 6);
       });
+      await onSyncComplete?.();
     } catch {
       setError("Match calculation failed.");
     } finally {
@@ -456,15 +469,34 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
                     <strong>{match.jobTitle}</strong>
                     <div className="panel-note">{match.company}</div>
                   </div>
-                  <span className="status-good">{match.matchScore}% match</span>
+                  <span className={match.eligible === false ? "status-warn" : "status-good"}>
+                    {match.eligible === false ? "Not eligible" : `${match.matchScore}% match`}
+                  </span>
                 </div>
                 <p className="panel-note">{match.explanation}</p>
+                {match.hardRequirements && match.hardRequirements.length > 0 ? (
+                  <div className="panel-note">
+                    Hard checks:{" "}
+                    {match.hardRequirements
+                      .map((item) => `${item.passed ? "Pass" : "Fail"} ${item.label}`)
+                      .join(", ")}
+                  </div>
+                ) : null}
+                {match.preferredRequirements && match.preferredRequirements.length > 0 ? (
+                  <div className="panel-note">
+                    Preferred:{" "}
+                    {match.preferredRequirements
+                      .map((item) => `${item.matched ? "Matched" : "Missing"} ${item.skill}`)
+                      .join(", ")}
+                  </div>
+                ) : null}
                 <div className="panel-note">
                   Strengths: {match.strengths.length > 0 ? match.strengths.join(", ") : "Resume aligned with the role baseline"}
                 </div>
                 <div className="panel-note">
                   Gaps: {match.missingSkills.length > 0 ? match.missingSkills.join(", ") : "No major gaps detected"}
                 </div>
+                {match.recommendation ? <p className="panel-note">{match.recommendation}</p> : null}
                 <a href={match.applyUrl} target="_blank" rel="noopener noreferrer" className="primary-link">
                   Apply to role
                 </a>
