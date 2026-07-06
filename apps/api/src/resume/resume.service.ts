@@ -59,6 +59,108 @@ const SKILL_ALIASES: Record<string, string> = {
   kubernetes: "Kubernetes",
 };
 
+const RESUME_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    personal: {
+      type: "object",
+      properties: {
+        name: { type: "string" }, email: { type: "string" }, phone: { type: "string" },
+        location: { type: "string" }, linkedin: { type: "string" }, github: { type: "string" },
+        portfolio: { type: "string" }, website: { type: "string" },
+      },
+      required: ["name", "email", "phone", "location", "linkedin", "github", "portfolio", "website"],
+      additionalProperties: false,
+    },
+    summary: { type: "string" },
+    skills: { type: "array", items: { type: "string" } },
+    experience: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          company: { type: "string" }, role: { type: "string" }, normalizedRole: { type: "string" },
+          years: { type: "number" }, startDate: { type: "string" }, endDate: { type: "string" },
+          current: { type: "boolean" }, durationMonths: { type: "number" }, description: { type: "string" },
+        },
+        required: ["company", "role", "normalizedRole", "years", "startDate", "endDate", "current", "durationMonths", "description"],
+        additionalProperties: false,
+      },
+    },
+    education: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          degree: { type: "string" }, normalizedDegree: { type: "string" },
+          branch: { type: "string" }, college: { type: "string" }, year: { type: "number" },
+        },
+        required: ["degree", "normalizedDegree", "branch", "college", "year"],
+        additionalProperties: false,
+      },
+    },
+    certifications: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { name: { type: "string" }, issuer: { type: "string" }, year: { type: "number" } },
+        required: ["name", "issuer", "year"],
+        additionalProperties: false,
+      },
+    },
+    projects: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" }, tech: { type: "array", items: { type: "string" } },
+          description: { type: "string" }, role: { type: "string" }, duration: { type: "string" },
+        },
+        required: ["name", "tech", "description", "role", "duration"],
+        additionalProperties: false,
+      },
+    },
+    achievements: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { title: { type: "string" }, description: { type: "string" } },
+        required: ["title", "description"],
+        additionalProperties: false,
+      },
+    },
+    publications: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string" }, venue: { type: "string" }, year: { type: "number" }, url: { type: "string" },
+        },
+        required: ["title", "venue", "year", "url"],
+        additionalProperties: false,
+      },
+    },
+    languages: { type: "array", items: { type: "string" } },
+    preferredRoles: { type: "array", items: { type: "string" } },
+    preferredIndustries: { type: "array", items: { type: "string" } },
+    workAuthorization: { type: "string" },
+    totalExperienceYears: { type: "number" },
+    currentRole: { type: "string" },
+    currentCompany: { type: "string" },
+    careerStage: {
+      type: "string",
+      enum: ["Student", "Intern", "New Graduate", "Entry Level", "Mid Level", "Senior", "Lead", "Manager", "Executive", "Career Switcher"],
+    },
+  },
+  required: [
+    "personal", "summary", "skills", "experience", "education", "certifications",
+    "projects", "achievements", "publications", "languages", "preferredRoles",
+    "preferredIndustries", "workAuthorization", "totalExperienceYears",
+    "currentRole", "currentCompany", "careerStage",
+  ],
+  additionalProperties: false,
+} as const;
+
 @Injectable()
 export class ResumeService {
   constructor(@Inject(DB_POOL) private readonly pool: Pool) {}
@@ -85,36 +187,40 @@ export class ResumeService {
   async parseWithLLM(rawText: string): Promise<ParsedProfile> {
     const hasGroqKeys = !!(process.env.GROQ_API_KEY || process.env.GROQ_API_KEY_2 || process.env.GROQ_API_KEY_3);
     if (hasGroqKeys) {
-      const prompt = `Extract structured data from this resume for a general-purpose career platform. Do not assume the candidate is a student. Read the entire resume text and identify all technical skills, programming languages, databases, frameworks, libraries, cloud providers, tools, certifications, achievements, publications, roles, and industries mentioned anywhere in the text. Return only valid JSON with this exact shape:
-{
-  "personal": { "name": "", "email": "", "phone": "", "location": "", "linkedin": "", "github": "", "portfolio": "", "website": "" },
-  "summary": "",
-  "skills": ["skill1", "skill2"],
-  "experience": [{ "company": "", "role": "", "normalizedRole": "", "years": 0, "startDate": "", "endDate": "", "current": false, "durationMonths": 0, "description": "" }],
-  "education": [{ "degree": "", "normalizedDegree": "", "branch": "", "college": "", "year": 0 }],
-  "certifications": [{ "name": "", "issuer": "", "year": 0 }],
-  "projects": [{ "name": "", "tech": [], "description": "", "role": "", "duration": "" }],
-  "achievements": [{ "title": "", "description": "" }],
-  "publications": [{ "title": "", "venue": "", "year": 0, "url": "" }],
-  "languages": [],
-  "preferredRoles": [],
-  "preferredIndustries": [],
-  "workAuthorization": "",
-  "totalExperienceYears": 0,
-  "currentRole": "",
-  "currentCompany": "",
-  "careerStage": "Entry Level"
-}
+      const prompt = `Extract structured data from this resume text. You MUST return exactly one valid JSON object matching the JSON Schema rules below. Do not wrap the JSON in Markdown code fences. Do not output prose, text, or warnings before or after the JSON.
 
-Resume:
+Expected JSON Schema:
+${JSON.stringify(RESUME_JSON_SCHEMA, null, 2)}
+
+Resume Text:
 ${rawText.slice(0, 6000)}`;
+
+      console.log(`[Groq Resume Parser] Starting extraction...`);
+      console.log(`- Resume raw text length: ${rawText.length}`);
+      console.log(`- LLM Prompt length: ${prompt.length}`);
+      console.log(`- Selected model: openai/gpt-oss-120b`);
+      console.log(`- JSON mode enabled: true`);
 
       try {
         const body = JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
+          model: "openai/gpt-oss-120b", // llama-3.3-70b-versatile shuts down 08/16/26 — migrate now
+          messages: [
+            {
+              role: "system",
+              content: "You are a resume parsing engine. Extract structured data matching the provided schema exactly.",
+            },
+            { role: "user", content: prompt },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "resume_profile",
+              schema: RESUME_JSON_SCHEMA,
+              strict: true,
+            },
+          },
           temperature: 0.1,
+          max_tokens: 4096, // was unset — with this schema size, worth setting explicitly rather than trusting the model default
         });
 
         const response = await fetchGroqWithRotation(body, AbortSignal.timeout(30000));
@@ -122,10 +228,25 @@ ${rawText.slice(0, 6000)}`;
         if (response.ok) {
           const data = await response.json();
           const content = data.choices?.[0]?.message?.content || "{}";
-          return this.normalizeProfile(JSON.parse(content));
+          console.log(`[Groq Resume Parser] Success. Response body length: ${content.length}`);
+          const parsed = this.normalizeProfile(JSON.parse(content));
+          console.log(`- Parsing result: Success`);
+          return parsed;
+        } else {
+          let errorText = "";
+          try {
+            errorText = await response.text();
+          } catch {
+            errorText = "Failed to parse body text";
+          }
+          console.error(`[Groq Resume Parser] Failed with HTTP status ${response.status}`);
+          console.error(`- Error body: ${errorText.slice(0, 500)}`);
+          console.log(`- Parsing result: Failure`);
+          throw new Error(`Groq failed with status ${response.status}`);
         }
-      } catch {
-        // ignore and fall through
+      } catch (err: any) {
+        console.error(`[Groq Resume Parser] Exception occurred: ${err?.message || String(err)}`);
+        console.log(`- Parsing result: Failure`);
       }
     }
 
@@ -138,33 +259,15 @@ ${rawText.slice(0, 6000)}`;
   }
 
   private async parseWithGemini(rawText: string, key: string): Promise<ParsedProfile> {
-    const prompt = `Extract structured data from this resume text for a general-purpose career platform. Do not assume the candidate is a student. Read the entire resume text and identify all technical skills, programming languages, databases, frameworks, libraries, cloud providers, tools, certifications, achievements, publications, roles, and industries mentioned anywhere in the text. Return a JSON object with this exact shape:
-{
-  "personal": { "name": "", "email": "", "phone": "", "location": "", "linkedin": "", "github": "", "portfolio": "", "website": "" },
-  "summary": "",
-  "skills": ["skill1", "skill2"],
-  "experience": [{ "company": "", "role": "", "normalizedRole": "", "years": 0, "startDate": "", "endDate": "", "current": false, "durationMonths": 0, "description": "" }],
-  "education": [{ "degree": "", "normalizedDegree": "", "branch": "", "college": "", "year": 0 }],
-  "certifications": [{ "name": "", "issuer": "", "year": 0 }],
-  "projects": [{ "name": "", "tech": [], "description": "", "role": "", "duration": "" }],
-  "achievements": [{ "title": "", "description": "" }],
-  "publications": [{ "title": "", "venue": "", "year": 0, "url": "" }],
-  "languages": [],
-  "preferredRoles": [],
-  "preferredIndustries": [],
-  "workAuthorization": "",
-  "totalExperienceYears": 0,
-  "currentRole": "",
-  "currentCompany": "",
-  "careerStage": "Entry Level"
-}
+    const prompt = `Extract structured data from this resume text for a general-purpose career platform. Do not assume the candidate is a student. Read the entire resume text and identify all technical skills, programming languages, databases, frameworks, libraries, cloud providers, tools, certifications, achievements, publications, roles, and industries mentioned anywhere in the text. Return a JSON object conforming to this JSON Schema:
+${JSON.stringify(RESUME_JSON_SCHEMA, null, 2)}
 
 Resume Text:
 ${rawText.slice(0, 8000)}`;
 
     try {
       const response = await fetchWithRetry(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
         {
           method: "POST",
           headers: {
@@ -212,14 +315,14 @@ ${rawText.slice(0, 8000)}`;
 
     try {
       const res = await fetchWithRetry(
-        `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${key}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${key}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: "models/text-embedding-004",
+            model: "models/gemini-embedding-2",
             content: { parts: [{ text: text.slice(0, 8000) }] },
-            taskType: "RETRIEVAL_DOCUMENT",
+            outputDimensionality: 768,
           }),
           signal: AbortSignal.timeout(10000),
         },
@@ -236,13 +339,46 @@ ${rawText.slice(0, 8000)}`;
     }
   }
 
+  private sanitizeNullBytes(value: unknown): any {
+    if (typeof value === "string") {
+      return value.replace(/\u0000/g, "");
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((item) => this.sanitizeNullBytes(item));
+    }
+
+    if (value && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, val]) => [
+          key,
+          this.sanitizeNullBytes(val),
+        ]),
+      );
+    }
+
+    return value;
+  }
+
   async parseAndStore(
     buffer: Buffer,
     mimetype: string,
     userId: string,
   ): Promise<{ profileId: string; profile: ParsedProfile }> {
-    const rawText = await this.extractText(buffer, mimetype);
-    const profile = await this.parseWithLLM(rawText);
+    console.log("1. Extracting");
+    let rawText = await this.extractText(buffer, mimetype);
+
+    // Count and remove null bytes from rawText
+    const nullBytesCount = (rawText.match(/\u0000/g) || []).length;
+    if (nullBytesCount > 0) {
+      console.log(`[Resume Parser] Sanitized resume text (removed ${nullBytesCount} NULL bytes)`);
+      rawText = rawText.replace(/\u0000/g, "");
+    }
+    rawText = rawText.trim();
+
+    console.log("2. Parsing");
+    const rawProfile = await this.parseWithLLM(rawText);
+    const profile = this.sanitizeNullBytes(rawProfile) as ParsedProfile;
 
     const embeddingText = [
       `Summary: ${profile.summary}`,
@@ -257,9 +393,11 @@ ${rawText.slice(0, 8000)}`;
       ...profile.projects.map((item) => `${item.name} (${item.tech.join(", ")}): ${item.description}`),
     ].join("\n\n");
 
+    console.log("3. Embedding");
     const embedding = await this.generateEmbedding(embeddingText);
     const embeddingParam = embedding ? `[${embedding.join(",")}]` : null;
 
+    console.log("4. Database");
     const existing = await this.pool.query<{ id: string }>(
       `SELECT id FROM candidate_profiles WHERE user_id = $1::uuid LIMIT 1`,
       [userId],

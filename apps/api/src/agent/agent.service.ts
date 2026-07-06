@@ -103,7 +103,16 @@ Workflow rules:
 7. After tool results, continue reasoning and either call another useful tool or produce the final answer.
 8. Keep answers practical, concise, and specific.
 9. If a tool returns null or an error, explain the missing prerequisite and continue helpfully instead of pretending the tool succeeded.
-10. Never say that you searched jobs, scored matches, or read a resume unless a tool result in the conversation shows that happened.`;
+10. Never say that you searched jobs, scored matches, or read a resume unless a tool result in the conversation shows that happened.
+11. When recommending jobs, you MUST format each job using this exact structure:
+- [<title>](<url>) at <company>
+  Job ID: \`<id>\`
+
+Rules:
+- If "url" is missing or empty for a job, render the title as plain text (no brackets/link).
+- If "id" is missing or empty for a job, omit the "Job ID:" line entirely for that job.
+- Never invent, guess, or fabricate a URL or Job ID. Only use values provided in the retrieved job data.
+- Do not alter the Job ID value in any way (no truncation, no reformatting).`;
 
 @Injectable()
 export class AgentService {

@@ -24,11 +24,27 @@ export async function fetchGroqWithRotation(
       "Content-Type": "application/json",
     };
 
-    try {
-      if (signal?.aborted) {
-        throw new Error("AbortSignal already aborted");
-      }
+    // Create a fresh local controller for this attempt
+    const attemptController = new AbortController();
 
+    // Link parent abort signal to this attempt's controller
+    let onParentAbort: (() => void) | null = null;
+    if (signal) {
+      if (signal.aborted) {
+        throw signal.reason || new DOMException("The user aborted a request.", "AbortError");
+      }
+      onParentAbort = () => {
+        attemptController.abort(signal.reason || new DOMException("The user aborted a request.", "AbortError"));
+      };
+      signal.addEventListener("abort", onParentAbort, { once: true });
+    }
+
+    // Set an independent timeout budget of 10 seconds for this key
+    const attemptTimeout = setTimeout(() => {
+      attemptController.abort(new DOMException("Groq API key attempt timed out after 10000ms", "TimeoutError"));
+    }, 10000);
+
+    try {
       console.log(`[Groq Rotation] Trying key ${attempt + 1}/${keys.length}...`);
 
       const res = await fetchWithRetry(
@@ -37,25 +53,55 @@ export async function fetchGroqWithRotation(
           method: "POST",
           headers,
           body,
-          signal,
+          signal: attemptController.signal,
         },
         maxRetriesPerKey,
         1000,
       );
 
-      if (res.status === 429) {
+      if (!res.ok) {
+        let errorDetails = "";
+        try {
+          errorDetails = await res.text();
+        } catch {
+          errorDetails = "Failed to read response body";
+        }
+
+        console.error(
+          `[Groq Rotation] Key ${attempt + 1}/${keys.length}\n` +
+          `Status: ${res.status}\n` +
+          `Reason: ${errorDetails.slice(0, 500)}\n` +
+          `Rotating to next key...`
+        );
+
+        if (res.status === 429 || res.status === 401 || res.status === 403) {
+          lastResponse = res;
+          continue;
+        }
+
+        // For other non-success codes, we also rotate
         lastResponse = res;
-        console.warn(`[Groq Rotation] Key ${attempt + 1}/${keys.length} rate limited (429). Rotating...`);
         continue;
       }
 
       return res;
-    } catch (error) {
-      console.warn(
-        `[Groq Rotation] Error on key ${attempt + 1}/${keys.length}: ${error instanceof Error ? error.message : String(error)}`,
+    } catch (error: any) {
+      console.error(
+        `[Groq Rotation] Exception on key ${attempt + 1}/${keys.length}: ${error?.message || String(error)}`
       );
+
+      // If the parent operation signal was the cause of abort, exit immediately
+      if (signal?.aborted) {
+        throw error;
+      }
+
       if (attempt === keys.length - 1) {
         throw error;
+      }
+    } finally {
+      clearTimeout(attemptTimeout);
+      if (signal && onParentAbort) {
+        signal.removeEventListener("abort", onParentAbort);
       }
     }
   }
@@ -63,5 +109,5 @@ export async function fetchGroqWithRotation(
   if (lastResponse) {
     return lastResponse;
   }
-  throw new Error("All Groq keys rate limited.");
+  throw new Error("All Groq keys failed or were rate limited.");
 }

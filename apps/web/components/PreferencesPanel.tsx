@@ -16,10 +16,18 @@ interface PreferencesPanelProps {
 export default function PreferencesPanel({ initialTargets, onRefresh }: PreferencesPanelProps) {
   const [targets, setTargets] = useState<CompanyTarget[]>(initialTargets);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
 
   React.useEffect(() => {
     setTargets(initialTargets);
   }, [initialTargets]);
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
 
   const handleToggle = async (
     companyId: string,
@@ -67,10 +75,10 @@ export default function PreferencesPanel({ initialTargets, onRefresh }: Preferen
   };
 
   return (
-    <article className="panel">
+    <article className="panel" id="notifications-section">
       <div className="panel-header">
         <div>
-          <div className="section-label">Watchlist routing</div>
+          <div className="section-label">Notification Preferences</div>
           <h2>How CareerPilot should notify you</h2>
         </div>
       </div>
@@ -82,37 +90,104 @@ export default function PreferencesPanel({ initialTargets, onRefresh }: Preferen
       {targets.length === 0 ? (
         <p className="panel-note">No tracked companies yet. Build your watchlist first, then this panel becomes your alert router.</p>
       ) : (
-        <div className="preferences-grid">
-          {targets.map((target) => (
-            <div key={target.company_id} className="preference-card">
-              <div>
-                <strong>{target.name}</strong>
-                <div className="preference-meta">{target.category.replace("-", " ")}</div>
-              </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "16px" }}>
+          {targets.map((target) => {
+            const isExpanded = !!expandedIds[target.company_id];
+            return (
+              <div 
+                key={target.company_id} 
+                style={{ 
+                  border: "1px solid var(--line)", 
+                  borderRadius: "var(--radius)",
+                  background: "var(--surface-muted)",
+                  overflow: "hidden"
+                }}
+              >
+                {/* Accordion Trigger */}
+                <button
+                  type="button"
+                  onClick={() => toggleExpand(target.company_id)}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "12px 16px",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    color: "var(--text)"
+                  }}
+                >
+                  <div>
+                    <strong style={{ fontSize: "0.95rem" }}>{target.name}</strong>
+                    <span 
+                      style={{ 
+                        marginLeft: "10px", 
+                        fontSize: "0.75rem", 
+                        color: "var(--muted)",
+                        background: "var(--surface)",
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                        border: "1px solid var(--line)"
+                      }}
+                    >
+                      {target.category.replace("-", " ")}
+                    </span>
+                  </div>
+                  <span style={{ transition: "transform 0.2s", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}>
+                    ▼
+                  </span>
+                </button>
 
-              <div className="preference-toggle-row">
-                <label className="toggle-label">
-                  <input
-                    type="checkbox"
-                    checked={target.notify_dashboard}
-                    disabled={updatingId === `${target.company_id}-dashboard`}
-                    onChange={() => handleToggle(target.company_id, "dashboard", target.notify_dashboard)}
-                  />
-                  <span>Dashboard</span>
-                </label>
+                {/* Accordion Content */}
+                {isExpanded && (
+                  <div 
+                    style={{ 
+                      padding: "16px", 
+                      background: "var(--surface)", 
+                      borderTop: "1px solid var(--line)",
+                      display: "flex",
+                      gap: "24px"
+                    }}
+                  >
+                    <label className="toggle-label" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={target.notify_dashboard}
+                        disabled={updatingId === `${target.company_id}-dashboard`}
+                        onChange={() => handleToggle(target.company_id, "dashboard", target.notify_dashboard)}
+                        style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "var(--accent)" }}
+                      />
+                      <span style={{ fontSize: "0.9rem" }}>Dashboard</span>
+                    </label>
 
-                <label className="toggle-label">
-                  <input
-                    type="checkbox"
-                    checked={target.notify_email}
-                    disabled={updatingId === `${target.company_id}-email`}
-                    onChange={() => handleToggle(target.company_id, "email", target.notify_email)}
-                  />
-                  <span>Email</span>
-                </label>
+                    <label className="toggle-label" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={target.notify_email}
+                        disabled={updatingId === `${target.company_id}-email`}
+                        onChange={() => handleToggle(target.company_id, "email", target.notify_email)}
+                        style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "var(--accent)" }}
+                      />
+                      <span style={{ fontSize: "0.9rem" }}>Email</span>
+                    </label>
+
+                    <label className="toggle-label" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "not-allowed", opacity: 0.5 }}>
+                      <input
+                        type="checkbox"
+                        checked={false}
+                        disabled={true}
+                        style={{ cursor: "not-allowed", width: "16px", height: "16px" }}
+                      />
+                      <span style={{ fontSize: "0.9rem" }}>Slack (Unavailable)</span>
+                    </label>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </article>

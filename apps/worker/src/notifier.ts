@@ -10,6 +10,26 @@ const __dirname = path.dirname(__filename);
 const SCRATCH_DIR = path.join(__dirname, "../scratch");
 const LOG_FILE_PATH = path.join(SCRATCH_DIR, "notifications_log.txt");
 
+/**
+ * Redacts PII before it ever touches a log file.
+ * "Ruturaj Challawar" -> "R****** C*********"
+ * "ruturajchallawar2811@gmail.com" -> "ru***@gmail.com"
+ */
+function redactName(fullName: string | null | undefined): string {
+  if (!fullName) return "[no-name]";
+  return fullName
+    .split(" ")
+    .map((part) => (part.length <= 1 ? part : part[0] + "*".repeat(part.length - 1)))
+    .join(" ");
+}
+
+function redactEmail(email: string | null | undefined): string {
+  if (!email || !email.includes("@")) return "[no-email]";
+  const [local, domain] = email.split("@");
+  const visible = local.slice(0, 2);
+  return `${visible}${"*".repeat(Math.max(local.length - 2, 1))}@${domain}`;
+}
+
 export interface NotifierSummary {
   studentsMatched: number;
   emailsDispatched: number;
@@ -218,10 +238,10 @@ export async function dispatchNotifications(): Promise<NotifierSummary> {
             // Write to mock email log
             const emailBlock = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [${new Date().toISOString()}] EMAIL ALERT
-To:      ${student.college_email}
+To:      ${redactEmail(student.college_email)}
 Subject: New Opportunity: ${drive.role} at ${drive.company_name}
 
-Hi ${student.full_name},
+Hi ${redactName(student.full_name)},
 A new placement drive matching your profile has been posted.
 
 Company:  ${drive.company_name}

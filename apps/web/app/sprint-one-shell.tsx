@@ -290,7 +290,7 @@ export function SprintOneShell({
             <button
               onClick={handleSaveProfile}
               disabled={isSaving}
-              style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              className="primary-link"
             >
               {isSaving ? "Saving..." : "Save Profile"}
             </button>

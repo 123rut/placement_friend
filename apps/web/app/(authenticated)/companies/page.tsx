@@ -349,13 +349,13 @@ export default function CompaniesPage() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <div className="topbar-kicker">CareerPilot registry</div>
-          <h1>ATS company watchlist</h1>
+          <span className="topbar-kicker">CareerPilot Registry</span>
+          <h1 style={{ fontSize: "1.85rem", fontWeight: 800, margin: "4px 0 0" }}>ATS Company Watchlist</h1>
+          <p style={{ color: "var(--muted)", margin: "4px 0 0", fontSize: "0.9rem" }}>
+            Add, update, and manage careers page tracking targets in the crawl index.
+          </p>
         </div>
         <nav className="topbar-actions">
-          <Link className="pill" href="/dashboard">
-            ← Dashboard
-          </Link>
           <button className="primary-link" style={{ border: "none" }} onClick={() => setShowAddForm(!showAddForm)}>
             {showAddForm ? "Close Form" : "+ Add Company"}
           </button>
@@ -412,7 +412,7 @@ export default function CompaniesPage() {
                   Validate & Save
                 </button>
                 <button
-                  className="action-btn"
+                  className="primary-link ghost-link"
                   style={{ flex: 1 }}
                   onClick={() => {
                     setShowAddForm(false);

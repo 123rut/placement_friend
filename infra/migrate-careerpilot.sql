@@ -140,9 +140,44 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON job_matches TO anon, authenticated, serv
 GRANT SELECT, INSERT, UPDATE, DELETE ON conversations TO anon, authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON sync_logs TO anon, authenticated, service_role;
 
--- Disable RLS for now
+-- Disable RLS for now on non-PII/non-sensitive tables
 ALTER TABLE jobs DISABLE ROW LEVEL SECURITY;
-ALTER TABLE candidate_profiles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE job_matches DISABLE ROW LEVEL SECURITY;
 ALTER TABLE conversations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE sync_logs DISABLE ROW LEVEL SECURITY;
+
+-- Re-enable Row Level Security on PII-holding tables
+ALTER TABLE candidate_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE students ENABLE ROW LEVEL SECURITY;
+
+-- candidate_profiles: a user can only see/edit their own row
+CREATE POLICY "candidate can view own profile"
+  ON candidate_profiles
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "candidate can update own profile"
+  ON candidate_profiles
+  FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "candidate can insert own profile"
+  ON candidate_profiles
+  FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- students: same pattern (students table PK is "id" of type text representing the auth.uid())
+CREATE POLICY "student can view own row"
+  ON students
+  FOR SELECT
+  USING (auth.uid()::text = id);
+
+CREATE POLICY "student can update own row"
+  ON students
+  FOR UPDATE
+  USING (auth.uid()::text = id);
+
+CREATE POLICY "student can insert own row"
+  ON students
+  FOR INSERT
+  WITH CHECK (auth.uid()::text = id);

@@ -360,14 +360,14 @@ export class JobsService {
 
     try {
       const res = await fetchWithRetry(
-        `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${key}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${key}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: "models/text-embedding-004",
+            model: "models/gemini-embedding-2",
             content: { parts: [{ text: text.slice(0, 2000) }] },
-            taskType: "RETRIEVAL_QUERY",
+            outputDimensionality: 768,
           }),
           signal: AbortSignal.timeout(10000),
         },

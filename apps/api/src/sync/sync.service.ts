@@ -3,6 +3,7 @@ import { Pool } from "pg";
 import { SyncResult } from "../careerpilot.types";
 import { DB_POOL } from "../db/db.module";
 import { companySeedData } from "./company-seed";
+import { JobsService } from "../jobs/jobs.service";
 
 interface NormalizedJob {
   title: string;
@@ -19,7 +20,10 @@ interface NormalizedJob {
 
 @Injectable()
 export class SyncService {
-  constructor(@Inject(DB_POOL) private readonly pool: Pool) {}
+  constructor(
+    @Inject(DB_POOL) private readonly pool: Pool,
+    private readonly jobsService: JobsService,
+  ) {}
 
   async getCompanies(activeOnly = true) {
     await this.ensureCareerPilotRegistry();
@@ -30,11 +34,11 @@ export class SyncService {
     return res.rows;
   }
 
-  async syncCompany(company: any, studentProfile?: any, studentRecord?: any): Promise<SyncResult> {
+  async syncCompany(company: any, studentProfile?: any, studentRecord?: any, userId?: string): Promise<SyncResult> {
     const start = Date.now();
     try {
       const jobs = await this.fetchJobsForATS(company);
-      const { total, newCount } = await this.upsertJobs(jobs, company.id, studentProfile, studentRecord);
+      const { total, newCount } = await this.upsertJobs(jobs, company.id, studentProfile, studentRecord, userId);
       const durationMs = Date.now() - start;
 
       await this.pool.query(
@@ -42,6 +46,7 @@ export class SyncService {
         [company.id]
       );
       await this.logSync(company.id, "success", total, newCount, durationMs);
+      console.log(`[Sync] Finished company ${company.name}: Found ${total} jobs, ${newCount} new saved.`);
 
       return { companyId: company.id, companyName: company.name, status: "success", jobsFound: total, jobsNew: newCount, durationMs };
     } catch (err: any) {
@@ -105,7 +110,24 @@ export class SyncService {
 
     const results: SyncResult[] = [];
     for (const company of companies) {
-      const result = await this.syncCompany(company, studentProfile, studentRecord);
+      const COMPANY_TIMEOUT_MS = 90_000; // 90 s per company — prevents one slow ATS from blocking the rest
+      const timeoutResult: SyncResult = {
+        companyId: company.id,
+        companyName: company.name,
+        status: "failed",
+        jobsFound: 0,
+        jobsNew: 0,
+        durationMs: COMPANY_TIMEOUT_MS,
+        error: `Sync timed out after ${COMPANY_TIMEOUT_MS / 1000}s`,
+      };
+
+      const result = await Promise.race([
+        this.syncCompany(company, studentProfile, studentRecord, userId),
+        new Promise<SyncResult>((resolve) =>
+          setTimeout(() => resolve(timeoutResult), COMPANY_TIMEOUT_MS)
+        ),
+      ]);
+
       results.push(result);
       await new Promise((r) => setTimeout(r, 300));
     }
@@ -283,9 +305,11 @@ export class SyncService {
     companyId: string,
     studentProfile?: any,
     studentRecord?: any,
+    userId?: string,
   ): Promise<{ total: number; newCount: number }> {
     if (jobs.length === 0) return { total: 0, newCount: 0 };
     let newCount = 0;
+    const syncedJobIds: string[] = [];
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -307,6 +331,8 @@ export class SyncService {
             continue;
           }
         }
+
+        console.log(`[Sync] ✅ Eligible: "${job.title}" (${job.employmentType}) — ${job.location || "Remote/Unknown"}`);
 
         const existingJob = existingMap.get(job.url);
         let embeddingParam: string | null = null;
@@ -330,14 +356,37 @@ export class SyncService {
              title=EXCLUDED.title, description=EXCLUDED.description, location=EXCLUDED.location,
              job_number=EXCLUDED.job_number,
              embedding=COALESCE(EXCLUDED.embedding, jobs.embedding), last_synced=NOW()
-           RETURNING (xmax = 0) AS is_new`,
+           RETURNING id, (xmax = 0) AS is_new`,
           [companyId, job.title, job.location, job.remote, job.employmentType, job.description, job.salaryMin, job.salaryMax, job.url, job.jobNumber, job.postedAt, embeddingParam]
         );
-        if (res.rows[0]?.is_new) newCount++;
+        const jobId = res.rows[0]?.id;
+        const isNew = res.rows[0]?.is_new;
+        if (jobId) {
+          syncedJobIds.push(jobId);
+        }
+        if (isNew) {
+          newCount++;
+          console.log(`[Sync] 🆕 New job saved: "${job.title}"`);
+        } else {
+          console.log(`[Sync] 🔄 Updated job: "${job.title}"`);
+        }
       }
       await client.query("COMMIT");
     } catch (e) { await client.query("ROLLBACK"); throw e; }
     finally { client.release(); }
+
+    // Match and score jobs after transaction commits (failure isolated)
+    if (userId && syncedJobIds.length > 0) {
+      console.log(`[Sync Auto-Match] Auto-scoring ${syncedJobIds.length} eligible jobs for user ${userId}...`);
+      for (const jobId of syncedJobIds) {
+        try {
+          await this.jobsService.matchJobToProfile(jobId, userId, { fast: true });
+        } catch (matchErr: any) {
+          console.warn(`[Sync Auto-Match] Failed to score job ${jobId}:`, matchErr.message);
+        }
+      }
+    }
+
     return { total: jobs.length, newCount };
   }
 
@@ -346,8 +395,8 @@ export class SyncService {
     if (!key) return null;
     try {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${key}`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "models/text-embedding-004", content: { parts: [{ text: text.slice(0, 8000) }] }, taskType: "RETRIEVAL_DOCUMENT" }), signal: AbortSignal.timeout(10000) }
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${key}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "models/gemini-embedding-2", content: { parts: [{ text: text.slice(0, 8000) }] }, outputDimensionality: 768 }), signal: AbortSignal.timeout(10000) }
       );
       if (!res.ok) return null;
       const data = await res.json();

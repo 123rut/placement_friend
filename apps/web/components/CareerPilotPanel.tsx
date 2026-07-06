@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 
 interface ParsedProfile {
   id?: string;
@@ -42,10 +42,6 @@ interface JobMatchResult {
   explanation: string;
   strengths: string[];
   missingSkills: string[];
-  hardRequirements?: Array<{ label: string; passed: boolean; detail: string }>;
-  preferredRequirements?: Array<{ skill: string; matched: boolean; weight: number }>;
-  recommendation?: string;
-  rejectionReasons?: string[];
   applyUrl: string;
   error?: string;
 }
@@ -60,14 +56,15 @@ interface CareerPilotPanelProps {
 }
 
 export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelProps) {
+  const [activeTab, setActiveTab] = useState<"chat" | "search" | "resume">("chat");
+
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [profile, setProfile] = useState<ParsedProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [asking, setAsking] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [message, setMessage] = useState("Find backend jobs in Bangalore");
-  const [agentReply, setAgentReply] = useState("");
+  const [message, setMessage] = useState("");
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [jobQuery, setJobQuery] = useState("backend engineer");
   const [jobLocation, setJobLocation] = useState("Bangalore");
@@ -77,6 +74,20 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
   const [topMatches, setTopMatches] = useState<JobMatchResult[]>([]);
   const [error, setError] = useState("");
   const [syncMessage, setSyncMessage] = useState("");
+
+  // Chat message history
+  const [messages, setMessages] = useState<Array<{ sender: "user" | "agent"; text: string }>>([
+    {
+      sender: "agent",
+      text: "Hi! I'm your CareerPilot Copilot. I can query jobs in the database, compute match scores based on your resume, and answer career planning questions. How can I help you today?",
+    },
+  ]);
+
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const loadTopMatches = async () => {
     try {
@@ -94,16 +105,12 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
             explanation: item.explanation,
             strengths: Array.isArray(item.strengths) ? item.strengths : [],
             missingSkills: Array.isArray(item.missing_skills) ? item.missing_skills : [],
-            hardRequirements: [],
-            preferredRequirements: [],
-            recommendation: "",
-            rejectionReasons: [],
             applyUrl: item.url,
-          })),
+          }))
         );
       }
     } catch {
-      // Keep panel usable even if matches are not available yet.
+      // Keep panel usable
     }
   };
 
@@ -167,32 +174,45 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
     }
   };
 
-  const handleAsk = async () => {
-    if (!message.trim()) {
-      return;
-    }
+  const handleAsk = async (textPrompt = message) => {
+    const promptToSend = textPrompt.trim();
+    if (!promptToSend) return;
+
     setError("");
     setAsking(true);
+    setMessage(""); // clear input box
+    
+    // Append user message
+    setMessages((prev) => [...prev, { sender: "user", text: promptToSend }]);
+
     try {
       const res = await fetch("/api/careerpilot/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message,
+          message: promptToSend,
           conversationId,
         }),
       });
       const data = (await res.json()) as AgentReply;
       if (!res.ok) {
         setError(data.error || "Agent request failed.");
+        setMessages((prev) => [
+          ...prev,
+          { sender: "agent", text: `Error: ${data.error || "Failed to fetch response from Copilot."}` },
+        ]);
       } else {
-        setAgentReply(data.reply || "");
         setConversationId(data.conversationId);
+        setMessages((prev) => [...prev, { sender: "agent", text: data.reply || "" }]);
         await loadTopMatches();
         await onSyncComplete?.();
       }
     } catch {
       setError("Agent request failed.");
+      setMessages((prev) => [
+        ...prev,
+        { sender: "agent", text: "Error: Copilot API is unreachable. Please verify Nest API is running on port 4000." },
+      ]);
     } finally {
       setAsking(false);
     }
@@ -203,16 +223,12 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
     setSyncMessage("");
     setSyncing(true);
     try {
-      const res = await fetch("/api/careerpilot/sync", {
-        method: "POST",
-      });
+      const res = await fetch("/api/careerpilot/sync", { method: "POST" });
       const data = (await res.json()) as SyncResultSummary & { error?: string };
       if (!res.ok) {
         setError(data.error || "Job sync failed.");
       } else {
-        setSyncMessage(
-          `Sync finished. ${data.success ?? 0} companies succeeded, ${data.failed ?? 0} failed.`,
-        );
+        setSyncMessage(`Sync completed: ${data.success ?? 0} successes.`);
         await loadTopMatches();
         await onSyncComplete?.();
       }
@@ -225,7 +241,7 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
 
   const handleSearchJobs = async () => {
     if (!jobQuery.trim()) {
-      setError("Add a role or keyword to search the jobs cache.");
+      setError("Enter a job keyword first.");
       return;
     }
 
@@ -246,7 +262,6 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
         setError(data.error || "Job search failed.");
         return;
       }
-
       setJobResults(Array.isArray(data.results) ? data.results : []);
     } catch {
       setError("Job search failed.");
@@ -267,244 +282,326 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
       const data = (await res.json()) as JobMatchResult;
 
       if (!res.ok || data.error) {
-        setError(data.error || "Match calculation failed.");
+        setError(data.error || "Fit score computation failed.");
         return;
       }
 
       setTopMatches((current) => {
-        const withoutCurrent = current.filter((item) => item.jobId !== data.jobId);
-        return [data, ...withoutCurrent].slice(0, 6);
+        const otherMatches = current.filter((item) => item.jobId !== data.jobId);
+        return [data, ...otherMatches].slice(0, 6);
       });
+      
+      // Notify client
+      setMessages((prev) => [
+        ...prev,
+        { sender: "agent", text: `Computed fit for "${data.jobTitle}" at ${data.company}: **${data.matchScore}% Match**\n\n*Explanation:* ${data.explanation}` },
+      ]);
       await onSyncComplete?.();
     } catch {
-      setError("Match calculation failed.");
+      setError("Fit score computation failed.");
     } finally {
       setMatchingJobId(null);
     }
   };
 
-  const formatPostedAt = (value: string | null) => {
-    if (!value) {
-      return "Recently";
+  const renderMessageContent = (text: string) => {
+    if (!text) return null;
+    const parts = [];
+    let lastIndex = 0;
+    const regex = /\[([^\]]+)\]\(([^)]+)\)|`([^`]+)`|\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/gi;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      const matchIndex = match.index;
+      if (matchIndex > lastIndex) {
+        parts.push(text.substring(lastIndex, matchIndex));
+      }
+
+      if (match[1] && match[2]) {
+        parts.push(
+          <a
+            key={matchIndex}
+            href={match[2]}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ textDecoration: "underline", fontWeight: "bold", color: "var(--accent)" }}
+          >
+            {match[1]}
+          </a>
+        );
+      } else if (match[3]) {
+        const code = match[3];
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
+        if (isUuid) {
+          parts.push(
+            <span key={matchIndex} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+              <code className="job-id-inline" title="Technical Job ID">{code.slice(0, 8)}...</code>
+              <button
+                onClick={() => handleComputeMatch(code)}
+                className="primary-link"
+                style={{ minHeight: "22px", padding: "1px 6px", fontSize: "0.7em" }}
+              >
+                Fit
+              </button>
+            </span>
+          );
+        } else {
+          parts.push(<code key={matchIndex} className="job-id-inline">{code}</code>);
+        }
+      } else if (match[4]) {
+        const code = match[4];
+        parts.push(
+          <span key={matchIndex} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <code className="job-id-inline">{code.slice(0, 8)}...</code>
+            <button
+              onClick={() => handleComputeMatch(code)}
+              className="primary-link"
+              style={{ minHeight: "22px", padding: "1px 6px", fontSize: "0.7em" }}
+            >
+              Fit
+            </button>
+          </span>
+        );
+      }
+
+      lastIndex = regex.lastIndex;
     }
 
-    return new Date(value).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : text;
   };
 
+  const suggestionChips = [
+    "Backend jobs in Bangalore",
+    "Java developer roles",
+    "Opportunities at Amazon",
+  ];
+
   return (
-    <article className="panel">
-      <div className="panel-header">
-        <div>
-          <div className="section-label">CareerPilot workspace</div>
-          <h2>Resume, search, and fit scoring in one place</h2>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* Tab Triggers */}
+      <div className="copilot-tabs" role="tablist" aria-label="CareerPilot tools">
+        <button
+          onClick={() => setActiveTab("chat")}
+          className={`copilot-tab-btn ${activeTab === "chat" ? "active" : ""}`}
+          role="tab"
+          aria-selected={activeTab === "chat"}
+          aria-controls="copilot-chat-panel"
+        >
+          Chat Copilot
+        </button>
+        <button
+          onClick={() => setActiveTab("search")}
+          className={`copilot-tab-btn ${activeTab === "search" ? "active" : ""}`}
+          role="tab"
+          aria-selected={activeTab === "search"}
+          aria-controls="copilot-search-panel"
+        >
+          Search Jobs
+        </button>
+        <button
+          onClick={() => setActiveTab("resume")}
+          className={`copilot-tab-btn ${activeTab === "resume" ? "active" : ""}`}
+          role="tab"
+          aria-selected={activeTab === "resume"}
+          aria-controls="copilot-resume-panel"
+        >
+          Profile Sync
+        </button>
+      </div>
+
+      {error && <p className="alert-inline" style={{ marginBottom: "12px" }}>{error}</p>}
+
+      {/* Tab 1: Conversation focus */}
+      {activeTab === "chat" && (
+        <div id="copilot-chat-panel" className="chat-tab-container" role="tabpanel">
+          <div className="chat-history">
+            {messages.map((msg, idx) => (
+              <div key={idx} className={`chat-bubble ${msg.sender}`}>
+                <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
+                  {renderMessageContent(msg.text)}
+                </pre>
+              </div>
+            ))}
+            <div ref={chatEndRef} />
+          </div>
+
+          <div className="chat-input-area">
+            {/* Suggestion Chips */}
+            <div className="suggestion-chips">
+              {suggestionChips.map((chip) => (
+                <button
+                  key={chip}
+                  onClick={() => handleAsk(chip)}
+                  className="suggestion-chip"
+                  disabled={asking}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                type="text"
+                className="careerpilot-input"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Ask your Copilot..."
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !asking) {
+                    handleAsk();
+                  }
+                }}
+                disabled={asking}
+                style={{ flex: 1, minHeight: "38px" }}
+              />
+              <button
+                onClick={() => handleAsk()}
+                disabled={asking}
+                className="primary-link"
+                style={{ minHeight: "38px", padding: "0 14px" }}
+              >
+                {asking ? "..." : "Send"}
+              </button>
+            </div>
+          </div>
         </div>
-        <span className={profile ? "status-good" : "status-warn"}>
-          {profile ? "Resume parsed" : "Resume needed"}
-        </span>
-      </div>
+      )}
 
-      <p className="panel-note">
-        Keep the flow simple: sync jobs, upload a resume, search roles, then score the best matches.
-      </p>
-
-      <div className="careerpilot-form-stack">
-        <section className="careerpilot-block">
-          <div className="careerpilot-block-head">
-            <div>
-              <div className="section-label">Step 1</div>
-              <h3>Prepare your profile</h3>
-            </div>
-          </div>
-          <div className="careerpilot-action-row">
-            <button className="primary-link panel-button" onClick={handleSyncJobs} disabled={syncing}>
-              {syncing ? "Syncing jobs..." : "Sync jobs cache"}
-            </button>
-            {syncMessage ? <span className="sync-note">{syncMessage}</span> : null}
-          </div>
-
-          <label className="field">
-            <span>Resume file</span>
+      {/* Tab 2: Clean search without long UUIDs */}
+      {activeTab === "search" && (
+        <div id="copilot-search-panel" role="tabpanel" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div className="field">
+            <span>Keywords</span>
             <input
-              type="file"
-              accept=".pdf,.doc,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={(event) => setResumeFile(event.target.files?.[0] || null)}
+              type="text"
+              value={jobQuery}
+              onChange={(e) => setJobQuery(e.target.value)}
+              placeholder="e.g. Java Engineer"
             />
-          </label>
-
-          <button className="primary-link panel-button" onClick={handleUpload} disabled={uploading}>
-            {uploading ? "Parsing resume..." : "Upload and parse resume"}
-          </button>
-
-          {loadingProfile ? <p className="panel-note">Checking for an existing parsed profile...</p> : null}
-          {profile ? (
-            <div className="resume-preview">
-              <div className="summary-grid">
-                <div>
-                  <div className="summary-label">Skills</div>
-                  <div className="summary-value">{profile.skills?.slice(0, 6).join(", ") || "No skills extracted yet"}</div>
-                </div>
-                <div>
-                  <div className="summary-label">Experience entries</div>
-                  <div className="summary-value">{profile.experience?.length || 0}</div>
-                </div>
-                <div>
-                  <div className="summary-label">Education entries</div>
-                  <div className="summary-value">{profile.education?.length || 0}</div>
-                </div>
-                <div>
-                  <div className="summary-label">Projects</div>
-                  <div className="summary-value">{profile.projects?.length || 0}</div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="careerpilot-block">
-          <div className="careerpilot-block-head">
-            <div>
-              <div className="section-label">Step 2</div>
-              <h3>Search the job cache</h3>
-            </div>
           </div>
-
           <div className="field">
-            <span>Role and location</span>
-            <div className="careerpilot-search-grid">
-              <input
-                className="careerpilot-input"
-                value={jobQuery}
-                onChange={(event) => setJobQuery(event.target.value)}
-                placeholder="Backend engineer"
-              />
-              <input
-                className="careerpilot-input"
-                value={jobLocation}
-                onChange={(event) => setJobLocation(event.target.value)}
-                placeholder="Bangalore"
-              />
-            </div>
-          </div>
-
-          <button className="primary-link panel-button" onClick={handleSearchJobs} disabled={searchingJobs}>
-            {searchingJobs ? "Searching jobs..." : "Search job cache"}
-          </button>
-        </section>
-
-        <section className="careerpilot-block">
-          <div className="careerpilot-block-head">
-            <div>
-              <div className="section-label">Step 3</div>
-              <h3>Ask the agent</h3>
-            </div>
-          </div>
-
-          <div className="field">
-            <span>Question</span>
-            <textarea
-              className="careerpilot-textarea"
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              placeholder="I'm a Java developer with 2 years of experience. Find backend jobs in Bangalore."
+            <span>Location</span>
+            <input
+              type="text"
+              value={jobLocation}
+              onChange={(e) => setJobLocation(e.target.value)}
+              placeholder="e.g. Bangalore"
             />
           </div>
 
-          <button className="primary-link panel-button" onClick={handleAsk} disabled={asking}>
-            {asking ? "Thinking..." : "Ask the agent"}
+          <button onClick={handleSearchJobs} disabled={searchingJobs} className="primary-link" style={{ width: "100%" }}>
+            {searchingJobs ? "Searching database..." : "Search Job Database"}
           </button>
 
-          {agentReply ? (
-            <div className="agent-reply">
-              <div className="summary-label">Agent reply</div>
-              <pre>{agentReply}</pre>
-            </div>
-          ) : null}
-        </section>
-
-        {error ? <p className="alert-inline">{error}</p> : null}
-
-        {jobResults.length > 0 ? (
-          <div className="careerpilot-results">
-            <div className="summary-label">Search results</div>
-            {jobResults.map((job) => (
-              <div key={job.id} className="careerpilot-result-card">
-                <div className="careerpilot-result-head">
-                  <div>
-                    <strong>{job.title}</strong>
-                    <div className="panel-note">
-                      {job.company_name} {job.location ? `• ${job.location}` : ""} {job.remote ? "• Remote-friendly" : ""}
+          {jobResults.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "8px" }}>
+              <span className="topbar-kicker" style={{ fontSize: "0.7rem" }}>Results from search cache</span>
+              {jobResults.map((job) => (
+                <div key={job.id} className="careerpilot-result-card" style={{ padding: "12px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                    <div>
+                      <strong style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>{job.title}</strong>
+                      <div className="metric-footnote" style={{ fontSize: "0.75rem" }}>
+                        {job.company_name} {job.location ? `• ${job.location}` : ""}
+                      </div>
                     </div>
+                    <button
+                      className="primary-link ghost-link"
+                      onClick={() => handleComputeMatch(job.id)}
+                      disabled={matchingJobId === job.id}
+                      style={{ minHeight: "26px", fontSize: "0.75rem", padding: "2px 8px" }}
+                    >
+                      {matchingJobId === job.id ? "..." : "Score"}
+                    </button>
                   </div>
-                  <button
-                    className="primary-link ghost-link"
-                    onClick={() => handleComputeMatch(job.id)}
-                    disabled={matchingJobId === job.id}
-                  >
-                    {matchingJobId === job.id ? "Scoring..." : "Score fit"}
-                  </button>
                 </div>
-                <div className="panel-note">
-                  Posted {formatPostedAt(job.posted_at)}
-                  {typeof job.similarity_score === "number" ? ` • Similarity ${Math.round(job.similarity_score * 100)}%` : ""}
-                </div>
-                <a href={job.url} target="_blank" rel="noopener noreferrer" className="primary-link">
-                  Open listing
-                </a>
-              </div>
-            ))}
-          </div>
-        ) : null}
+              ))}
+            </div>
+          )}
 
-        {topMatches.length > 0 ? (
-          <div className="careerpilot-results">
-            <div className="summary-label">Top ranked matches</div>
-            {topMatches.map((match) => (
-              <div key={match.jobId} className="careerpilot-result-card">
-                <div className="careerpilot-result-head">
-                  <div>
-                    <strong>{match.jobTitle}</strong>
-                    <div className="panel-note">{match.company}</div>
+          {topMatches.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px" }}>
+              <span className="topbar-kicker" style={{ fontSize: "0.7rem" }}>Scored Fit Matches</span>
+              {topMatches.slice(0, 3).map((match) => (
+                <div key={match.jobId} className="careerpilot-result-card" style={{ padding: "12px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <strong style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>{match.jobTitle}</strong>
+                      <div className="metric-footnote" style={{ fontSize: "0.75rem" }}>{match.company}</div>
+                    </div>
+                    <span className="status-good" style={{ fontSize: "0.72rem", padding: "2px 6px" }}>
+                      {match.matchScore}%
+                    </span>
                   </div>
-                  <span className={match.eligible === false ? "status-warn" : "status-good"}>
-                    {match.eligible === false ? "Not eligible" : `${match.matchScore}% match`}
-                  </span>
                 </div>
-                <p className="panel-note">{match.explanation}</p>
-                {match.hardRequirements && match.hardRequirements.length > 0 ? (
-                  <div className="panel-note">
-                    Hard checks:{" "}
-                    {match.hardRequirements
-                      .map((item) => `${item.passed ? "Pass" : "Fail"} ${item.label}`)
-                      .join(", ")}
-                  </div>
-                ) : null}
-                {match.preferredRequirements && match.preferredRequirements.length > 0 ? (
-                  <div className="panel-note">
-                    Preferred:{" "}
-                    {match.preferredRequirements
-                      .map((item) => `${item.matched ? "Matched" : "Missing"} ${item.skill}`)
-                      .join(", ")}
-                  </div>
-                ) : null}
-                <div className="panel-note">
-                  Strengths: {match.strengths.length > 0 ? match.strengths.join(", ") : "Resume aligned with the role baseline"}
-                </div>
-                <div className="panel-note">
-                  Gaps: {match.missingSkills.length > 0 ? match.missingSkills.join(", ") : "No major gaps detected"}
-                </div>
-                {match.recommendation ? <p className="panel-note">{match.recommendation}</p> : null}
-                <a href={match.applyUrl} target="_blank" rel="noopener noreferrer" className="primary-link">
-                  Apply to role
-                </a>
-              </div>
-            ))}
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 3: Resume uploader and sync stats */}
+      {activeTab === "resume" && (
+        <div id="copilot-resume-panel" role="tabpanel" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div>
+            <h4 style={{ margin: "0 0 6px", fontSize: "0.9rem" }}>1. Upload PDF Resume</h4>
+            <label className="field" style={{ gap: "6px" }}>
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,application/pdf"
+                onChange={(e) => setResumeFile(e.target.files?.[0] || null)}
+                style={{ padding: "6px", fontSize: "0.8rem", border: "1px dashed var(--line)" }}
+              />
+            </label>
+            <button className="primary-link" onClick={handleUpload} disabled={uploading} style={{ width: "100%", marginTop: "10px" }}>
+              {uploading ? "Parsing..." : "Upload and Parse"}
+            </button>
           </div>
-        ) : null}
-      </div>
-    </article>
+
+          {loadingProfile ? (
+            <p className="panel-note">Checking baseline profile...</p>
+          ) : profile ? (
+            <div className="resume-preview" style={{ padding: "12px", background: "var(--surface-muted)", borderRadius: "var(--radius)" }}>
+              <span className="topbar-kicker" style={{ fontSize: "0.68rem" }}>Active Baseline Resume</span>
+              <div className="summary-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginTop: "8px" }}>
+                <div>
+                  <div className="summary-label" style={{ fontSize: "0.7rem" }}>Skills</div>
+                  <div className="summary-value" style={{ fontSize: "0.8rem" }}>
+                    {profile.skills && profile.skills.length > 0 ? profile.skills.length : 0} extracted
+                  </div>
+                </div>
+                <div>
+                  <div className="summary-label" style={{ fontSize: "0.7rem" }}>Experience</div>
+                  <div className="summary-value" style={{ fontSize: "0.8rem" }}>{profile.experience?.length || 0} items</div>
+                </div>
+                <div>
+                  <div className="summary-label" style={{ fontSize: "0.7rem" }}>Education</div>
+                  <div className="summary-value" style={{ fontSize: "0.8rem" }}>{profile.education?.length || 0} items</div>
+                </div>
+                <div>
+                  <div className="summary-label" style={{ fontSize: "0.7rem" }}>Projects</div>
+                  <div className="summary-value" style={{ fontSize: "0.8rem" }}>{profile.projects?.length || 0} items</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div style={{ borderTop: "1px solid var(--line)", paddingTop: "14px" }}>
+            <h4 style={{ margin: "0 0 6px", fontSize: "0.9rem" }}>2. Find Matching Jobs</h4>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <button className="primary-link" onClick={handleSyncJobs} disabled={syncing} style={{ flexShrink: 0 }}>
+                {syncing ? "Syncing..." : "Sync Jobs Cache"}
+              </button>
+              {syncMessage && <span className="sync-note" style={{ fontSize: "0.78rem" }}>{syncMessage}</span>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

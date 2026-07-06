@@ -17,7 +17,7 @@ if (!connectionString) {
 
 export const pool = new pg.Pool({
   connectionString,
-  ssl: connectionString?.includes("supabase.co") ? { rejectUnauthorized: false } : false
+  ssl: connectionString?.includes("supabase") ? { rejectUnauthorized: false } : false
 });
 
 export interface CompanyDb {

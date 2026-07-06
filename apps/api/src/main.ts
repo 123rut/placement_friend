@@ -5,6 +5,14 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix("api");
   app.enableCors({ origin: "http://localhost:3000", credentials: true });
+
+  // Raise server socket timeouts well above the default 5 min.
+  // The full-sync endpoint can take 5–15 min when iterating many companies.
+  const FIFTEEN_MINUTES = 15 * 60 * 1000;
+  const httpServer = app.getHttpServer();
+  httpServer.setTimeout(FIFTEEN_MINUTES);       // idle socket timeout
+  httpServer.keepAliveTimeout = FIFTEEN_MINUTES; // HTTP keep-alive
+
   await app.listen(process.env.PORT ?? 4000);
   console.log(`🚀 CareerPilot API running on http://localhost:4000/api`);
 }
