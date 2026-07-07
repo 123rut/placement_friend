@@ -19,8 +19,8 @@
     "typecheck:worker": "npm --workspace @piaa/worker run typecheck",
     "build": "npm run build:api && npm run build:worker && npm run build:web",
     "typecheck": "npm run typecheck:worker && npm run typecheck:web",
-    "validate:companies": "node scripts/validate-company-catalog.mjs",
-    "validate:companies:metadata": "node scripts/validate-company-catalog.mjs --metadata-only",
+    "validate:companies": "node --experimental-strip-types scripts/validate-company-catalog.mjs",
+    "validate:companies:metadata": "node --experimental-strip-types scripts/validate-company-catalog.mjs --metadata-only",
     "db:init": "node --experimental-strip-types infra/init-db.ts"
   },
   "devDependencies": {

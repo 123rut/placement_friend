@@ -16,7 +16,8 @@ export const categoryLabels: Record<CompanyCategory, string> = {
   core: "Core",
   consulting: "Consulting",
   bfsi: "BFSI",
-  startup: "Startup"
+  startup: "Startup",
+  company: "Company"
 };
 
 export const sprintOneStudent: StudentProfile = {

@@ -1,4 +1,4 @@
-import { careerPilotCompanies } from "../packages/domain/src/careerpilot-companies.js";
+import { seedCompanies } from "../packages/domain/src/companies.ts";
 
 const timeoutMs = 15_000;
 const concurrency = 8;
@@ -9,7 +9,7 @@ function workdayHostFor(company) {
   }
 
   try {
-    const host = new URL(company.careerUrl).host;
+    const host = new URL(company.careersUrl).host;
     if (host.includes("myworkdayjobs.com")) {
       return host;
     }
@@ -21,7 +21,7 @@ function workdayHostFor(company) {
 }
 
 function validateMetadata(company) {
-  const required = ["id", "name", "ats", "identifier", "careerUrl", "city", "country", "industry"];
+  const required = ["id", "name", "ats", "identifier", "careersUrl", "city", "country", "industry"];
   const missing = required.filter((key) => !company[key]);
   if (company.ats === "workday" && !company.site) {
     missing.push("site");
@@ -34,6 +34,29 @@ function validateMetadata(company) {
     durationMs: 0,
     error: missing.length === 0 ? null : `Missing fields: ${missing.join(", ")}`,
   };
+}
+
+function validateCatalogShape(companies) {
+  const seenIds = new Set();
+  const duplicateIds = new Set();
+
+  for (const company of companies) {
+    if (seenIds.has(company.id)) {
+      duplicateIds.add(company.id);
+    }
+    seenIds.add(company.id);
+  }
+
+  return [...duplicateIds].map((id) => ({
+    company: {
+      id,
+      ats: "catalog",
+    },
+    ok: false,
+    status: "duplicate id",
+    durationMs: 0,
+    error: `Duplicate company id: ${id}`,
+  }));
 }
 
 function requestFor(company) {
@@ -71,6 +94,10 @@ function requestFor(company) {
     case "smartrecruiters":
       return {
         url: `https://api.smartrecruiters.com/v1/companies/${company.identifier}/postings?limit=1`,
+      };
+    case "amazon":
+      return {
+        url: "https://www.amazon.jobs/en/search.json?base_query=&result_limit=1&offset=0",
       };
     default:
       throw new Error(`Unsupported ATS: ${company.ats}`);
@@ -130,33 +157,37 @@ const args = process.argv.slice(2);
 const metadataOnly = args.includes("--metadata-only");
 const requestedIds = new Set(args.filter((arg) => arg !== "--metadata-only"));
 const companies = requestedIds.size
-  ? careerPilotCompanies.filter((company) => requestedIds.has(company.id))
-  : careerPilotCompanies;
+  ? seedCompanies.filter((company) => requestedIds.has(company.id))
+  : seedCompanies;
 
-if (requestedIds.size && companies.length !== requestedIds.size) {
+if (requestedIds.size) {
   const foundIds = new Set(companies.map((company) => company.id));
   const missingIds = [...requestedIds].filter((id) => !foundIds.has(id));
-  console.error(`Unknown company IDs: ${missingIds.join(", ")}`);
+  if (missingIds.length) {
+    console.error(`Unknown company IDs: ${missingIds.join(", ")}`);
+    process.exit(1);
+  }
+}
+
+const mode = metadataOnly ? "metadata" : "live ATS";
+console.log(`Validating ${companies.length} ATS configurations (${mode})...`);
+const results = metadataOnly
+  ? companies.map(validateMetadata)
+  : await mapWithConcurrency(companies, validate);
+const catalogShapeResults = validateCatalogShape(companies);
+const allResults = [...catalogShapeResults, ...results];
+const failed = allResults.filter((result) => !result.ok);
+
+for (const result of allResults) {
+  const marker = result.ok ? "PASS" : "FAIL";
+  const status = result.status || result.error;
+  console.log(
+    `${marker.padEnd(4)} ${result.company.id.padEnd(28)} ${result.company.ats.padEnd(15)} ${String(status).padEnd(20)} ${result.durationMs}ms`,
+  );
+}
+
+const passed = allResults.length - failed.length;
+console.log(`\n${passed}/${allResults.length} ATS configurations passed.`);
+if (failed.length) {
   process.exitCode = 1;
-} else {
-  const mode = metadataOnly ? "metadata" : "live ATS";
-  console.log(`Validating ${companies.length} ATS configurations (${mode})...`);
-  const results = metadataOnly
-    ? companies.map(validateMetadata)
-    : await mapWithConcurrency(companies, validate);
-  const failed = results.filter((result) => !result.ok);
-
-  for (const result of results) {
-    const marker = result.ok ? "PASS" : "FAIL";
-    const status = result.status || result.error;
-    console.log(
-      `${marker.padEnd(4)} ${result.company.id.padEnd(28)} ${result.company.ats.padEnd(15)} ${String(status).padEnd(20)} ${result.durationMs}ms`,
-    );
-  }
-
-  const passed = results.length - failed.length;
-  console.log(`\n${passed}/${results.length} ATS configurations passed.`);
-  if (failed.length) {
-    process.exitCode = 1;
-  }
 }

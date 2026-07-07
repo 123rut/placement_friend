@@ -6,7 +6,8 @@ export type CompanyCategory =
   | "core"
   | "consulting"
   | "bfsi"
-  | "startup";
+  | "startup"
+  | "company";
 
 export type CompanySource = "seed" | "user-added" | "crowdsourced" | "careerpilot-catalog";
 
