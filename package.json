@@ -21,7 +21,7 @@
     "typecheck": "npm run typecheck:worker && npm run typecheck:web",
     "validate:companies": "node scripts/validate-company-catalog.mjs",
     "validate:companies:metadata": "node scripts/validate-company-catalog.mjs --metadata-only",
-    "db:init": "node infra/init-db.js"
+    "db:init": "node --experimental-strip-types infra/init-db.ts"
   },
   "devDependencies": {
     "dotenv": "^17.4.2",

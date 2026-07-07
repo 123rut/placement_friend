@@ -2,7 +2,6 @@ import { Injectable, Inject } from "@nestjs/common";
 import { Pool } from "pg";
 import { SyncResult } from "../careerpilot.types";
 import { DB_POOL } from "../db/db.module";
-import { companySeedData } from "./company-seed";
 import { JobsService } from "../jobs/jobs.service";
 
 interface NormalizedJob {
@@ -26,7 +25,6 @@ export class SyncService {
   ) {}
 
   async getCompanies(activeOnly = true) {
-    await this.ensureCareerPilotRegistry();
     const q = activeOnly
       ? `SELECT * FROM companies WHERE is_active = TRUE AND ats IS NOT NULL ORDER BY name`
       : `SELECT * FROM companies WHERE ats IS NOT NULL ORDER BY name`;
@@ -134,50 +132,7 @@ export class SyncService {
     return results;
   }
 
-  private async ensureCareerPilotRegistry(): Promise<void> {
-    const currentIds = companySeedData.map((c) => c.id);
 
-    if (currentIds.length > 0) {
-      await this.pool.query(
-        `UPDATE companies 
-         SET is_active = FALSE 
-         WHERE source IN ('careerpilot-seed', 'seed') AND id NOT IN (${currentIds.map((_, i) => `$${i + 1}`).join(",")})`,
-        currentIds,
-      );
-    }
-
-    for (const company of companySeedData) {
-      await this.pool.query(
-        `INSERT INTO companies (id, name, slug, careers_url, category, eligible_branches, source, ats, identifier, ats_host, site, industry, city, country, sync_status, is_active, is_global, region, added_by)
-         VALUES ($1, $2, $3, $4, 'it-product', '{}', 'careerpilot-seed', $5, $6, $7, $8, $9, $10, $11, 'pending', TRUE, TRUE, $12, 'agent')
-         ON CONFLICT (id) DO UPDATE SET
-           name = EXCLUDED.name,
-           careers_url = EXCLUDED.careers_url,
-           ats = EXCLUDED.ats,
-           identifier = EXCLUDED.identifier,
-           ats_host = EXCLUDED.ats_host,
-           site = EXCLUDED.site,
-           industry = EXCLUDED.industry,
-           city = EXCLUDED.city,
-           country = EXCLUDED.country,
-           is_active = TRUE`,
-        [
-          company.id,
-          company.name,
-          company.id,
-          company.careerUrl,
-          company.ats,
-          company.identifier,
-          this.workdayHostFor(company),
-          company.site || null,
-          company.industry,
-          company.city,
-          company.country,
-          company.country,
-        ],
-      );
-    }
-  }
 
   private async fetchJobsForATS(company: any): Promise<NormalizedJob[]> {
     switch (company.ats) {
@@ -415,22 +370,7 @@ export class SyncService {
     return html.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim();
   }
 
-  private workdayHostFor(company: { ats: string; careerUrl: string; identifier: string }): string | null {
-    if (company.ats !== "workday") {
-      return null;
-    }
 
-    try {
-      const host = new URL(company.careerUrl).host;
-      if (host.includes("myworkdayjobs.com")) {
-        return host;
-      }
-    } catch {
-      // Fall through to the common Workday host pattern.
-    }
-
-    return `${company.identifier}.wd1.myworkdayjobs.com`;
-  }
 
   async getSyncLogs(limit = 50) {
     const res = await this.pool.query(

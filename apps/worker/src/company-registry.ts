@@ -1,4 +1,4 @@
-import { careerPilotCompanies } from "../../../packages/domain/src/careerpilot-companies.js";
+import { seedCompanies } from "../../../packages/domain/src/companies.js";
 
 /**
  * CareerPilot AI - Company Registry
@@ -19,4 +19,15 @@ export interface CompanySeed {
   industry: string;
 }
 
-export const companySeedData: CompanySeed[] = careerPilotCompanies;
+export const companySeedData: CompanySeed[] = seedCompanies.map(c => ({
+  id: c.id,
+  name: c.name,
+  ats: c.ats as any,
+  identifier: c.identifier || "",
+  host: c.host || undefined,
+  site: c.site || undefined,
+  careerUrl: c.careersUrl,
+  city: c.city || "San Francisco",
+  country: c.country || "US",
+  industry: c.industry || "Technology"
+}));

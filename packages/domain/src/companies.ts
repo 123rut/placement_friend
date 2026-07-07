@@ -1,1020 +1,2312 @@
-import type { Company, CompanyCategory } from "./types";
-
-type SeedCompanyInput = {
-  name: string;
-  careersUrl: string;
-  category: CompanyCategory;
-  eligibleBranches: string[];
-  minCgpa: number | null;
-  avgPackageLpa: number | null;
-};
-
-const urlVerifiedAt = "2026-06-10T00:00:00.000Z";
-
-const branches = {
-  cs: ["Computer Science", "Information Technology"],
-  csPlus: ["Computer Science", "Information Technology", "Electronics"],
-  engineering: ["Computer Science", "Information Technology", "Electronics", "Electrical"],
-  allEngineering: [
-    "Computer Science",
-    "Information Technology",
-    "Electronics",
-    "Electrical",
-    "Mechanical",
-    "Civil"
-  ],
-  core: ["Mechanical", "Electrical", "Electronics", "Civil"]
-};
-
-const slugify = (value: string) =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-const createSeedCompany = (input: SeedCompanyInput): Company => ({
-  id: slugify(input.name),
-  slug: slugify(input.name),
-  name: input.name,
-  careersUrl: input.careersUrl,
-  category: input.category,
-  eligibleBranches: input.eligibleBranches,
-  minCgpa: input.minCgpa,
-  avgPackageLpa: input.avgPackageLpa,
-  source: "seed",
-  urlVerifiedAt,
-  isActive: true
-});
+import type { Company } from "./types";
 
 export const seedCompanies: Company[] = [
-  createSeedCompany({
-    name: "Google",
-    careersUrl: "https://careers.google.com/jobs/results",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 8,
-    avgPackageLpa: 32
-  }),
-  createSeedCompany({
-    name: "Microsoft",
-    careersUrl: "https://jobs.careers.microsoft.com/global/en/search",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 28
-  }),
-  createSeedCompany({
-    name: "Amazon",
-    careersUrl: "https://www.amazon.jobs/en",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 26
-  }),
-  createSeedCompany({
-    name: "Atlassian",
-    careersUrl: "https://www.atlassian.com/company/careers/all-jobs",
-    category: "it-product",
-    eligibleBranches: branches.cs,
-    minCgpa: 8,
-    avgPackageLpa: 24
-  }),
-  createSeedCompany({
-    name: "Adobe",
-    careersUrl: "https://careers.adobe.com/us/en",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 23
-  }),
-  createSeedCompany({
-    name: "Salesforce",
-    careersUrl: "https://careers.salesforce.com/en/jobs",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 22
-  }),
-  createSeedCompany({
-    name: "Oracle",
-    careersUrl: "https://www.oracle.com/careers",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 18
-  }),
-  createSeedCompany({
-    name: "SAP",
-    careersUrl: "https://www.sap.com/about/careers.html",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 18
-  }),
-  createSeedCompany({
-    name: "ServiceNow",
-    careersUrl: "https://careers.servicenow.com",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 21
-  }),
-  createSeedCompany({
-    name: "Workday",
-    careersUrl: "https://workday.wd5.myworkdayjobs.com/Workday",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 20
-  }),
-  createSeedCompany({
-    name: "Intuit",
-    careersUrl: "https://jobs.intuit.com",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 22
-  }),
-  createSeedCompany({
-    name: "Cisco",
-    careersUrl: "https://jobs.cisco.com",
-    category: "it-product",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7,
-    avgPackageLpa: 17
-  }),
-  createSeedCompany({
-    name: "IBM",
-    careersUrl: "https://www.ibm.com/careers",
-    category: "it-service",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 12
-  }),
-  createSeedCompany({
-    name: "Accenture",
-    careersUrl: "https://www.accenture.com/in-en/careers",
-    category: "it-service",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 7.5
-  }),
-  createSeedCompany({
-    name: "Infosys",
-    careersUrl: "https://www.infosys.com/careers",
-    category: "it-service",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6,
-    avgPackageLpa: 6.5
-  }),
-  createSeedCompany({
-    name: "TCS",
-    careersUrl: "https://www.tcs.com/careers",
-    category: "it-service",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6,
-    avgPackageLpa: 4.2
-  }),
-  createSeedCompany({
-    name: "Wipro",
-    careersUrl: "https://careers.wipro.com",
-    category: "it-service",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6,
-    avgPackageLpa: 4.5
-  }),
-  createSeedCompany({
-    name: "HCLTech",
-    careersUrl: "https://www.hcltech.com/careers",
-    category: "it-service",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6,
-    avgPackageLpa: 4.8
-  }),
-  createSeedCompany({
-    name: "Cognizant",
-    careersUrl: "https://careers.cognizant.com/in/en",
-    category: "it-service",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6,
-    avgPackageLpa: 4.5
-  }),
-  createSeedCompany({
-    name: "Capgemini",
-    careersUrl: "https://www.capgemini.com/careers",
-    category: "it-service",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6,
-    avgPackageLpa: 4.5
-  }),
-  createSeedCompany({
-    name: "Tech Mahindra",
-    careersUrl: "https://careers.techmahindra.com",
-    category: "it-service",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6,
-    avgPackageLpa: 4.2
-  }),
-  createSeedCompany({
-    name: "LTIMindtree",
-    careersUrl: "https://www.ltimindtree.com/careers",
-    category: "it-service",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6,
-    avgPackageLpa: 4.8
-  }),
-  createSeedCompany({
-    name: "Mphasis",
-    careersUrl: "https://careers.mphasis.com",
-    category: "it-service",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6,
-    avgPackageLpa: 5
-  }),
-  createSeedCompany({
-    name: "Persistent Systems",
-    careersUrl: "https://www.persistent.com/careers",
-    category: "it-service",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 7.5
-  }),
-  createSeedCompany({
-    name: "Deloitte",
-    careersUrl: "https://www2.deloitte.com/global/en/careers.html",
-    category: "consulting",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 8
-  }),
-  createSeedCompany({
-    name: "EY",
-    careersUrl: "https://www.ey.com/en_in/careers",
-    category: "consulting",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 7
-  }),
-  createSeedCompany({
-    name: "PwC",
-    careersUrl: "https://www.pwc.com/gx/en/careers.html",
-    category: "consulting",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 7.5
-  }),
-  createSeedCompany({
-    name: "KPMG",
-    careersUrl: "https://kpmg.com/in/en/home/careers.html",
-    category: "consulting",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 7.2
-  }),
-  createSeedCompany({
-    name: "Bain & Company",
-    careersUrl: "https://www.bain.com/careers",
-    category: "consulting",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7.5,
-    avgPackageLpa: 18
-  }),
-  createSeedCompany({
-    name: "Boston Consulting Group",
-    careersUrl: "https://careers.bcg.com",
-    category: "consulting",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7.5,
-    avgPackageLpa: 18
-  }),
-  createSeedCompany({
-    name: "McKinsey & Company",
-    careersUrl: "https://www.mckinsey.com/careers",
-    category: "consulting",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7.5,
-    avgPackageLpa: 20
-  }),
-  createSeedCompany({
-    name: "ZS Associates",
-    careersUrl: "https://jobs.zs.com",
-    category: "consulting",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7,
-    avgPackageLpa: 10
-  }),
-  createSeedCompany({
-    name: "Goldman Sachs",
-    careersUrl: "https://www.goldmansachs.com/careers",
-    category: "bfsi",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 22
-  }),
-  createSeedCompany({
-    name: "JPMorgan Chase",
-    careersUrl: "https://careers.jpmorgan.com",
-    category: "bfsi",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 19
-  }),
-  createSeedCompany({
-    name: "Morgan Stanley",
-    careersUrl: "https://www.morganstanley.com/careers",
-    category: "bfsi",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 20
-  }),
-  createSeedCompany({
-    name: "American Express",
-    careersUrl: "https://www.americanexpress.com/en-us/careers",
-    category: "bfsi",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7,
-    avgPackageLpa: 14
-  }),
-  createSeedCompany({
-    name: "Visa",
-    careersUrl: "https://corporate.visa.com/en/careers.html",
-    category: "bfsi",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 20
-  }),
-  createSeedCompany({
-    name: "Mastercard",
-    careersUrl: "https://careers.mastercard.com",
-    category: "bfsi",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 18
-  }),
-  createSeedCompany({
-    name: "PayPal",
-    careersUrl: "https://careers.pypl.com",
-    category: "bfsi",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 17
-  }),
-  createSeedCompany({
-    name: "Razorpay",
-    careersUrl: "https://razorpay.com/jobs",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 16
-  }),
-  createSeedCompany({
-    name: "PhonePe",
-    careersUrl: "https://www.phonepe.com/careers",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 17
-  }),
-  createSeedCompany({
-    name: "Groww",
-    careersUrl: "https://groww.in/careers",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 16
-  }),
-  createSeedCompany({
-    name: "Zerodha",
-    careersUrl: "https://zerodha.com/careers",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 14
-  }),
-  createSeedCompany({
-    name: "Paytm",
-    careersUrl: "https://paytm.com/careers",
-    category: "startup",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 9
-  }),
-  createSeedCompany({
-    name: "Flipkart",
-    careersUrl: "https://www.flipkartcareers.com",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 18
-  }),
-  createSeedCompany({
-    name: "Meesho",
-    careersUrl: "https://www.meesho.io/jobs",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 17
-  }),
-  createSeedCompany({
-    name: "Swiggy",
-    careersUrl: "https://careers.swiggy.com",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 16
-  }),
-  createSeedCompany({
-    name: "Zomato",
-    careersUrl: "https://www.zomato.com/careers",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 15
-  }),
-  createSeedCompany({
-    name: "Uber",
-    careersUrl: "https://www.uber.com/us/en/careers",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 26
-  }),
-  createSeedCompany({
-    name: "Ola",
-    careersUrl: "https://www.olacabs.com/careers",
-    category: "startup",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 12
-  }),
-  createSeedCompany({
-    name: "NVIDIA",
-    careersUrl: "https://www.nvidia.com/en-in/about-nvidia/careers",
-    category: "it-product",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7.5,
-    avgPackageLpa: 28
-  }),
-  createSeedCompany({
-    name: "Intel",
-    careersUrl: "https://jobs.intel.com",
-    category: "it-product",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7,
-    avgPackageLpa: 16
-  }),
-  createSeedCompany({
-    name: "AMD",
-    careersUrl: "https://careers.amd.com",
-    category: "it-product",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7,
-    avgPackageLpa: 18
-  }),
-  createSeedCompany({
-    name: "Qualcomm",
-    careersUrl: "https://www.qualcomm.com/company/careers",
-    category: "it-product",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7,
-    avgPackageLpa: 18
-  }),
-  createSeedCompany({
-    name: "Texas Instruments",
-    careersUrl: "https://careers.ti.com",
-    category: "core",
-    eligibleBranches: ["Electronics", "Electrical", "Computer Science"],
-    minCgpa: 7.5,
-    avgPackageLpa: 18
-  }),
-  createSeedCompany({
-    name: "Samsung R&D",
-    careersUrl: "https://research.samsung.com/careers",
-    category: "it-product",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7,
-    avgPackageLpa: 15
-  }),
-  createSeedCompany({
-    name: "Bosch",
-    careersUrl: "https://www.bosch.in/careers",
-    category: "core",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 8
-  }),
-  createSeedCompany({
-    name: "Siemens",
-    careersUrl: "https://www.siemens.com/global/en/company/jobs.html",
-    category: "core",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 9
-  }),
-  createSeedCompany({
-    name: "GE Aerospace",
-    careersUrl: "https://jobs.gecareers.com",
-    category: "core",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 10
-  }),
-  createSeedCompany({
-    name: "Honeywell",
-    careersUrl: "https://careers.honeywell.com",
-    category: "core",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 11
-  }),
-  createSeedCompany({
-    name: "Schneider Electric",
-    careersUrl: "https://www.se.com/in/en/about-us/careers",
-    category: "core",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 8.5
-  }),
-  createSeedCompany({
-    name: "Shell",
-    careersUrl: "https://www.shell.com/careers",
-    category: "core",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7,
-    avgPackageLpa: 12
-  }),
-  createSeedCompany({
-    name: "Reliance Industries",
-    careersUrl: "https://www.ril.com/Careers.aspx",
-    category: "core",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 7
-  }),
-  createSeedCompany({
-    name: "Tata Motors",
-    careersUrl: "https://careers.tatamotors.com",
-    category: "core",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 7
-  }),
-  createSeedCompany({
-    name: "Mahindra & Mahindra",
-    careersUrl: "https://www.mahindra.com/careers",
-    category: "core",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 7
-  }),
-  createSeedCompany({
-    name: "Bajaj Auto",
-    careersUrl: "https://www.bajajauto.com/careers",
-    category: "core",
-    eligibleBranches: branches.core,
-    minCgpa: 6.5,
-    avgPackageLpa: 7
-  }),
-  createSeedCompany({
-    name: "Maruti Suzuki",
-    careersUrl: "https://www.marutisuzuki.com/corporate/careers",
-    category: "core",
-    eligibleBranches: branches.core,
-    minCgpa: 6.5,
-    avgPackageLpa: 6.8
-  }),
-  createSeedCompany({
-    name: "Larsen & Toubro",
-    careersUrl: "https://www.larsentoubro.com/corporate/careers",
-    category: "core",
-    eligibleBranches: branches.allEngineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 7.5
-  }),
-  createSeedCompany({
-    name: "Mercedes-Benz Research",
-    careersUrl: "https://jobs.mercedes-benz.com",
-    category: "core",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7,
-    avgPackageLpa: 13
-  }),
-  createSeedCompany({
-    name: "Renault Nissan Technology",
-    careersUrl: "https://rntbcijobs.com",
-    category: "core",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 8.5
-  }),
-  createSeedCompany({
-    name: "HSBC",
-    careersUrl: "https://www.hsbc.com/careers",
-    category: "bfsi",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 10
-  }),
-  createSeedCompany({
-    name: "Barclays",
-    careersUrl: "https://search.jobs.barclays",
-    category: "bfsi",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 14
-  }),
-  createSeedCompany({
-    name: "Deutsche Bank",
-    careersUrl: "https://careers.db.com",
-    category: "bfsi",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 14
-  }),
-  createSeedCompany({
-    name: "Standard Chartered",
-    careersUrl: "https://www.sc.com/en/global-careers",
-    category: "bfsi",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 9
-  }),
-  createSeedCompany({
-    name: "Citi",
-    careersUrl: "https://jobs.citi.com",
-    category: "bfsi",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 13
-  }),
-  createSeedCompany({
-    name: "Wells Fargo",
-    careersUrl: "https://www.wellsfargojobs.com",
-    category: "bfsi",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 12
-  }),
-  createSeedCompany({
-    name: "UBS",
-    careersUrl: "https://www.ubs.com/global/en/careers.html",
-    category: "bfsi",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 14
-  }),
-  createSeedCompany({
-    name: "Media.net",
-    careersUrl: "https://careers.media.net",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 19
-  }),
-  createSeedCompany({
-    name: "Freshworks",
-    careersUrl: "https://www.freshworks.com/company/careers",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 15
-  }),
-  createSeedCompany({
-    name: "Zoho",
-    careersUrl: "https://www.zoho.com/careers",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 6.5,
-    avgPackageLpa: 10
-  }),
-  createSeedCompany({
-    name: "Postman",
-    careersUrl: "https://www.postman.com/company/careers",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 17
-  }),
-  createSeedCompany({
-    name: "BrowserStack",
-    careersUrl: "https://www.browserstack.com/careers",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 16
-  }),
-  createSeedCompany({
-    name: "Chargebee",
-    careersUrl: "https://www.chargebee.com/careers",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 15
-  }),
-  createSeedCompany({
-    name: "Gojek",
-    careersUrl: "https://www.gojek.io/careers",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 16
-  }),
-  createSeedCompany({
-    name: "CRED",
-    careersUrl: "https://careers.cred.club",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 16
-  }),
-  createSeedCompany({
-    name: "InMobi",
-    careersUrl: "https://www.inmobi.com/company/careers",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 15
-  }),
-  createSeedCompany({
-    name: "ShareChat",
-    careersUrl: "https://sharechat.com/careers",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 15
-  }),
-  createSeedCompany({
-    name: "Myntra",
-    careersUrl: "https://www.myntra.com/careers",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 14
-  }),
-  createSeedCompany({
-    name: "Walmart Global Tech",
-    careersUrl: "https://tech.walmart.com/content/walmart-global-tech/en_us/careers.html",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 18
-  }),
-  createSeedCompany({
-    name: "Target",
-    careersUrl: "https://corporate.target.com/careers",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 16
-  }),
-  createSeedCompany({
-    name: "Booking.com",
-    careersUrl: "https://jobs.booking.com",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 24
-  }),
-  createSeedCompany({
-    name: "Expedia Group",
-    careersUrl: "https://careers.expediagroup.com",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 21
-  }),
-  createSeedCompany({
-    name: "Agoda",
-    careersUrl: "https://careersatagoda.com",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 19
-  }),
-  createSeedCompany({
-    name: "Red Hat",
-    careersUrl: "https://www.redhat.com/en/jobs",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 18
-  }),
-  createSeedCompany({
-    name: "VMware",
-    careersUrl: "https://careers.vmware.com",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 20
-  }),
-  createSeedCompany({
-    name: "Dell Technologies",
-    careersUrl: "https://jobs.dell.com",
-    category: "it-product",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 11
-  }),
-  createSeedCompany({
-    name: "HP Enterprise",
-    careersUrl: "https://careers.hpe.com",
-    category: "it-product",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 11
-  }),
-  createSeedCompany({
-    name: "NetApp",
-    careersUrl: "https://careers.netapp.com",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 17
-  }),
-  createSeedCompany({
-    name: "Arm",
-    careersUrl: "https://careers.arm.com",
-    category: "core",
-    eligibleBranches: ["Electronics", "Electrical", "Computer Science"],
-    minCgpa: 7.5,
-    avgPackageLpa: 20
-  }),
-  createSeedCompany({
-    name: "Broadcom",
-    careersUrl: "https://careers.broadcom.com",
-    category: "core",
-    eligibleBranches: ["Electronics", "Electrical", "Computer Science"],
-    minCgpa: 7.5,
-    avgPackageLpa: 19
-  }),
-  createSeedCompany({
-    name: "Micron",
-    careersUrl: "https://careers.micron.com",
-    category: "core",
-    eligibleBranches: ["Electronics", "Electrical", "Computer Science"],
-    minCgpa: 7,
-    avgPackageLpa: 15
-  }),
-  createSeedCompany({
-    name: "Analog Devices",
-    careersUrl: "https://www.analog.com/en/careers.html",
-    category: "core",
-    eligibleBranches: ["Electronics", "Electrical", "Computer Science"],
-    minCgpa: 7,
-    avgPackageLpa: 16
-  }),
-  createSeedCompany({
-    name: "Cadence",
-    careersUrl: "https://www.cadence.com/en_US/home/company/careers.html",
-    category: "it-product",
-    eligibleBranches: ["Electronics", "Computer Science", "Information Technology"],
-    minCgpa: 7,
-    avgPackageLpa: 16
-  }),
-  createSeedCompany({
-    name: "Synopsys",
-    careersUrl: "https://www.synopsys.com/careers.html",
-    category: "it-product",
-    eligibleBranches: ["Electronics", "Computer Science", "Information Technology"],
-    minCgpa: 7,
-    avgPackageLpa: 16
-  }),
-  createSeedCompany({
-    name: "MathWorks",
-    careersUrl: "https://www.mathworks.com/company/jobs.html",
-    category: "it-product",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7.5,
-    avgPackageLpa: 19
-  }),
-  createSeedCompany({
-    name: "EPAM",
-    careersUrl: "https://www.epam.com/careers",
-    category: "it-service",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 7.5
-  }),
-  createSeedCompany({
-    name: "Publicis Sapient",
-    careersUrl: "https://careers.publicissapient.com",
-    category: "consulting",
-    eligibleBranches: branches.engineering,
-    minCgpa: 6.5,
-    avgPackageLpa: 8
-  }),
-  createSeedCompany({
-    name: "Thoughtworks",
-    careersUrl: "https://www.thoughtworks.com/careers",
-    category: "consulting",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 10
-  }),
-  createSeedCompany({
-    name: "S&P Global",
-    careersUrl: "https://careers.spglobal.com",
-    category: "bfsi",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 6.5,
-    avgPackageLpa: 9
-  }),
-  createSeedCompany({
-    name: "BlackRock",
-    careersUrl: "https://careers.blackrock.com",
-    category: "bfsi",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 16
-  }),
-  createSeedCompany({
-    name: "Sprinklr",
-    careersUrl: "https://www.sprinklr.com/careers",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 17
-  }),
-  createSeedCompany({
-    name: "Cohesity",
-    careersUrl: "https://www.cohesity.com/company/careers",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 18
-  }),
-  createSeedCompany({
-    name: "Rubrik",
-    careersUrl: "https://www.rubrik.com/company/careers",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7,
-    avgPackageLpa: 19
-  }),
-  createSeedCompany({
-    name: "Snowflake",
-    careersUrl: "https://careers.snowflake.com",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 24
-  }),
-  createSeedCompany({
-    name: "Databricks",
-    careersUrl: "https://www.databricks.com/company/careers",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 24
-  }),
-  createSeedCompany({
-    name: "Cloudflare",
-    careersUrl: "https://www.cloudflare.com/careers",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 22
-  }),
-  createSeedCompany({
-    name: "Stripe",
-    careersUrl: "https://stripe.com/jobs",
-    category: "startup",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 24
-  }),
-  createSeedCompany({
-    name: "LinkedIn",
-    careersUrl: "https://careers.linkedin.com",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 7.5,
-    avgPackageLpa: 26
-  }),
-  createSeedCompany({
-    name: "Meta",
-    careersUrl: "https://www.metacareers.com",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 8,
-    avgPackageLpa: 32
-  }),
-  createSeedCompany({
-    name: "Apple",
-    careersUrl: "https://jobs.apple.com",
-    category: "it-product",
-    eligibleBranches: branches.csPlus,
-    minCgpa: 8,
-    avgPackageLpa: 30
-  }),
-  createSeedCompany({
-    name: "Tesla",
-    careersUrl: "https://www.tesla.com/careers",
-    category: "core",
-    eligibleBranches: branches.engineering,
-    minCgpa: 7,
-    avgPackageLpa: 18
-  })
-].slice(0, 100);
+  {
+    "id": "stripe",
+    "slug": "stripe",
+    "name": "Stripe",
+    "careersUrl": "https://boards.greenhouse.io/stripe",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "stripe",
+    "site": null,
+    "host": null,
+    "industry": "fintech",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "figma",
+    "slug": "figma",
+    "name": "Figma",
+    "careersUrl": "https://boards.greenhouse.io/figma",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "figma",
+    "site": null,
+    "host": null,
+    "industry": "design-tools",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "coinbase",
+    "slug": "coinbase",
+    "name": "Coinbase",
+    "careersUrl": "https://boards.greenhouse.io/coinbase",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "coinbase",
+    "site": null,
+    "host": null,
+    "industry": "crypto",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "vercel",
+    "slug": "vercel",
+    "name": "Vercel",
+    "careersUrl": "https://boards.greenhouse.io/vercel",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "vercel",
+    "site": null,
+    "host": null,
+    "industry": "cloud",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "phonepe",
+    "slug": "phonepe",
+    "name": "PhonePe",
+    "careersUrl": "https://boards.greenhouse.io/phonepe",
+    "category": "startup",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7,
+    "avgPackageLpa": 17,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "phonepe",
+    "site": null,
+    "host": null,
+    "industry": "fintech",
+    "city": "Bangalore",
+    "country": "IN"
+  },
+  {
+    "id": "groww",
+    "slug": "groww",
+    "name": "Groww",
+    "careersUrl": "https://boards.greenhouse.io/groww",
+    "category": "startup",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7,
+    "avgPackageLpa": 16,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "groww",
+    "site": null,
+    "host": null,
+    "industry": "fintech",
+    "city": "Bangalore",
+    "country": "IN"
+  },
+  {
+    "id": "reddit",
+    "slug": "reddit",
+    "name": "Reddit",
+    "careersUrl": "https://boards.greenhouse.io/reddit",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "reddit",
+    "site": null,
+    "host": null,
+    "industry": "social",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "dropbox",
+    "slug": "dropbox",
+    "name": "Dropbox",
+    "careersUrl": "https://boards.greenhouse.io/dropbox",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "dropbox",
+    "site": null,
+    "host": null,
+    "industry": "cloud",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "airbnb",
+    "slug": "airbnb",
+    "name": "Airbnb",
+    "careersUrl": "https://boards.greenhouse.io/airbnb",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "airbnb",
+    "site": null,
+    "host": null,
+    "industry": "travel",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "discord",
+    "slug": "discord",
+    "name": "Discord",
+    "careersUrl": "https://boards.greenhouse.io/discord",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "discord",
+    "site": null,
+    "host": null,
+    "industry": "social",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "datadog",
+    "slug": "datadog",
+    "name": "Datadog",
+    "careersUrl": "https://boards.greenhouse.io/datadog",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "datadog",
+    "site": null,
+    "host": null,
+    "industry": "observability",
+    "city": "New York",
+    "country": "US"
+  },
+  {
+    "id": "asana",
+    "slug": "asana",
+    "name": "Asana",
+    "careersUrl": "https://boards.greenhouse.io/asana",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "asana",
+    "site": null,
+    "host": null,
+    "industry": "productivity",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "affirm",
+    "slug": "affirm",
+    "name": "Affirm",
+    "careersUrl": "https://boards.greenhouse.io/affirm",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "affirm",
+    "site": null,
+    "host": null,
+    "industry": "fintech",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "roblox",
+    "slug": "roblox",
+    "name": "Roblox",
+    "careersUrl": "https://boards.greenhouse.io/roblox",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "roblox",
+    "site": null,
+    "host": null,
+    "industry": "gaming",
+    "city": "San Mateo",
+    "country": "US"
+  },
+  {
+    "id": "hubspot",
+    "slug": "hubspot",
+    "name": "HubSpot",
+    "careersUrl": "https://boards.greenhouse.io/hubspot",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "hubspot",
+    "site": null,
+    "host": null,
+    "industry": "saas",
+    "city": "Cambridge",
+    "country": "US"
+  },
+  {
+    "id": "okta",
+    "slug": "okta",
+    "name": "Okta",
+    "careersUrl": "https://boards.greenhouse.io/okta",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "okta",
+    "site": null,
+    "host": null,
+    "industry": "identity",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "lyft",
+    "slug": "lyft",
+    "name": "Lyft",
+    "careersUrl": "https://boards.greenhouse.io/lyft",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "lyft",
+    "site": null,
+    "host": null,
+    "industry": "mobility",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "doordash",
+    "slug": "doordash",
+    "name": "DoorDash",
+    "careersUrl": "https://boards.greenhouse.io/doordashusa",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "doordashusa",
+    "site": null,
+    "host": null,
+    "industry": "food-delivery",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "instacart",
+    "slug": "instacart",
+    "name": "Instacart",
+    "careersUrl": "https://boards.greenhouse.io/instacart",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "instacart",
+    "site": null,
+    "host": null,
+    "industry": "ecommerce",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "mongodb",
+    "slug": "mongodb",
+    "name": "MongoDB",
+    "careersUrl": "https://boards.greenhouse.io/mongodb",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "mongodb",
+    "site": null,
+    "host": null,
+    "industry": "database",
+    "city": "New York",
+    "country": "US"
+  },
+  {
+    "id": "twilio",
+    "slug": "twilio",
+    "name": "Twilio",
+    "careersUrl": "https://boards.greenhouse.io/twilio",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "twilio",
+    "site": null,
+    "host": null,
+    "industry": "communications",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "gitlab",
+    "slug": "gitlab",
+    "name": "GitLab",
+    "careersUrl": "https://boards.greenhouse.io/gitlab",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "gitlab",
+    "site": null,
+    "host": null,
+    "industry": "devtools",
+    "city": "Remote",
+    "country": "US"
+  },
+  {
+    "id": "pinterest",
+    "slug": "pinterest",
+    "name": "Pinterest",
+    "careersUrl": "https://boards.greenhouse.io/pinterest",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "pinterest",
+    "site": null,
+    "host": null,
+    "industry": "social",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "coursera",
+    "slug": "coursera",
+    "name": "Coursera",
+    "careersUrl": "https://boards.greenhouse.io/coursera",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "coursera",
+    "site": null,
+    "host": null,
+    "industry": "edtech",
+    "city": "Mountain View",
+    "country": "US"
+  },
+  {
+    "id": "scale-ai",
+    "slug": "scale-ai",
+    "name": "Scale AI",
+    "careersUrl": "https://boards.greenhouse.io/scaleai",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "scaleai",
+    "site": null,
+    "host": null,
+    "industry": "ai",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "peloton",
+    "slug": "peloton",
+    "name": "Peloton",
+    "careersUrl": "https://boards.greenhouse.io/peloton",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "peloton",
+    "site": null,
+    "host": null,
+    "industry": "fitness",
+    "city": "New York",
+    "country": "US"
+  },
+  {
+    "id": "duolingo",
+    "slug": "duolingo",
+    "name": "Duolingo",
+    "careersUrl": "https://boards.greenhouse.io/duolingo",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "duolingo",
+    "site": null,
+    "host": null,
+    "industry": "edtech",
+    "city": "Pittsburgh",
+    "country": "US"
+  },
+  {
+    "id": "samsara",
+    "slug": "samsara",
+    "name": "Samsara",
+    "careersUrl": "https://boards.greenhouse.io/samsara",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "samsara",
+    "site": null,
+    "host": null,
+    "industry": "iot",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "nubank",
+    "slug": "nubank",
+    "name": "Nubank",
+    "careersUrl": "https://boards.greenhouse.io/nubank",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "nubank",
+    "site": null,
+    "host": null,
+    "industry": "fintech",
+    "city": "Sao Paulo",
+    "country": "BR"
+  },
+  {
+    "id": "brex",
+    "slug": "brex",
+    "name": "Brex",
+    "careersUrl": "https://boards.greenhouse.io/brex",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "brex",
+    "site": null,
+    "host": null,
+    "industry": "fintech",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "anthropic",
+    "slug": "anthropic",
+    "name": "Anthropic",
+    "careersUrl": "https://boards.greenhouse.io/anthropic",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "greenhouse",
+    "identifier": "anthropic",
+    "site": null,
+    "host": null,
+    "industry": "ai",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "mindtickle",
+    "slug": "mindtickle",
+    "name": "Mindtickle",
+    "careersUrl": "https://jobs.lever.co/mindtickle",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "lever",
+    "identifier": "mindtickle",
+    "site": null,
+    "host": null,
+    "industry": "saas",
+    "city": "Pune",
+    "country": "IN"
+  },
+  {
+    "id": "clari",
+    "slug": "clari",
+    "name": "Clari",
+    "careersUrl": "https://jobs.lever.co/clari",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "lever",
+    "identifier": "clari",
+    "site": null,
+    "host": null,
+    "industry": "saas",
+    "city": "Sunnyvale",
+    "country": "US"
+  },
+  {
+    "id": "notion",
+    "slug": "notion",
+    "name": "Notion",
+    "careersUrl": "https://jobs.ashbyhq.com/notion",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "ashby",
+    "identifier": "notion",
+    "site": null,
+    "host": null,
+    "industry": "productivity",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "linear",
+    "slug": "linear",
+    "name": "Linear",
+    "careersUrl": "https://jobs.ashbyhq.com/linear",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "ashby",
+    "identifier": "linear",
+    "site": null,
+    "host": null,
+    "industry": "devtools",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "perplexity",
+    "slug": "perplexity",
+    "name": "Perplexity",
+    "careersUrl": "https://jobs.ashbyhq.com/perplexity",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "ashby",
+    "identifier": "perplexity",
+    "site": null,
+    "host": null,
+    "industry": "ai",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "loom",
+    "slug": "loom",
+    "name": "Loom",
+    "careersUrl": "https://jobs.ashbyhq.com/loom",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "ashby",
+    "identifier": "loom",
+    "site": null,
+    "host": null,
+    "industry": "saas",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "cursor",
+    "slug": "cursor",
+    "name": "Cursor",
+    "careersUrl": "https://jobs.ashbyhq.com/cursor",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "ashby",
+    "identifier": "cursor",
+    "site": null,
+    "host": null,
+    "industry": "ai-devtools",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "elevenlabs",
+    "slug": "elevenlabs",
+    "name": "ElevenLabs",
+    "careersUrl": "https://jobs.ashbyhq.com/elevenlabs",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "ashby",
+    "identifier": "elevenlabs",
+    "site": null,
+    "host": null,
+    "industry": "ai",
+    "city": "London",
+    "country": "UK"
+  },
+  {
+    "id": "harvey",
+    "slug": "harvey",
+    "name": "Harvey",
+    "careersUrl": "https://jobs.ashbyhq.com/harvey",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "ashby",
+    "identifier": "harvey",
+    "site": null,
+    "host": null,
+    "industry": "legal-ai",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "mercor",
+    "slug": "mercor",
+    "name": "Mercor",
+    "careersUrl": "https://jobs.ashbyhq.com/mercor",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "ashby",
+    "identifier": "mercor",
+    "site": null,
+    "host": null,
+    "industry": "recruiting-ai",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "runway",
+    "slug": "runway",
+    "name": "Runway",
+    "careersUrl": "https://jobs.ashbyhq.com/runway",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "ashby",
+    "identifier": "runway",
+    "site": null,
+    "host": null,
+    "industry": "ai-video",
+    "city": "New York",
+    "country": "US"
+  },
+  {
+    "id": "pika",
+    "slug": "pika",
+    "name": "Pika",
+    "careersUrl": "https://jobs.ashbyhq.com/pika",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "ashby",
+    "identifier": "pika",
+    "site": null,
+    "host": null,
+    "industry": "ai-video",
+    "city": "Palo Alto",
+    "country": "US"
+  },
+  {
+    "id": "synthesia",
+    "slug": "synthesia",
+    "name": "Synthesia",
+    "careersUrl": "https://jobs.ashbyhq.com/synthesia",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "ashby",
+    "identifier": "synthesia",
+    "site": null,
+    "host": null,
+    "industry": "ai-video",
+    "city": "London",
+    "country": "UK"
+  },
+  {
+    "id": "nvidia",
+    "slug": "nvidia",
+    "name": "NVIDIA",
+    "careersUrl": "https://nvidia.wd5.myworkdayjobs.com",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics",
+      "Electrical"
+    ],
+    "minCgpa": 7.5,
+    "avgPackageLpa": 28,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "nvidia",
+    "site": "NVIDIAExternalCareerSite",
+    "host": null,
+    "industry": "semiconductor",
+    "city": "Santa Clara",
+    "country": "US"
+  },
+  {
+    "id": "workday",
+    "slug": "workday",
+    "name": "Workday",
+    "careersUrl": "https://workday.wd5.myworkdayjobs.com/Workday",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7.5,
+    "avgPackageLpa": 20,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "workday",
+    "site": "Workday",
+    "host": null,
+    "industry": "hr-tech",
+    "city": "Pleasanton",
+    "country": "US"
+  },
+  {
+    "id": "dell",
+    "slug": "dell",
+    "name": "Dell",
+    "careersUrl": "https://jobs.dell.com",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "dell",
+    "site": "External",
+    "host": null,
+    "industry": "hardware",
+    "city": "Round Rock",
+    "country": "US"
+  },
+  {
+    "id": "mastercard",
+    "slug": "mastercard",
+    "name": "Mastercard",
+    "careersUrl": "https://careers.mastercard.com",
+    "category": "bfsi",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7.5,
+    "avgPackageLpa": 18,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "mastercard",
+    "site": "CorporateCareers",
+    "host": null,
+    "industry": "payments",
+    "city": "Purchase",
+    "country": "US"
+  },
+  {
+    "id": "google",
+    "slug": "google",
+    "name": "Google",
+    "careersUrl": "https://careers.google.com",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 8,
+    "avgPackageLpa": 32,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "google",
+    "site": "Google_Jobs_Search",
+    "host": null,
+    "industry": "tech",
+    "city": "Mountain View",
+    "country": "US"
+  },
+  {
+    "id": "microsoft",
+    "slug": "microsoft",
+    "name": "Microsoft",
+    "careersUrl": "https://jobs.careers.microsoft.com",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7.5,
+    "avgPackageLpa": 28,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "microsoftcareers",
+    "site": "External_Careers",
+    "host": null,
+    "industry": "tech",
+    "city": "Redmond",
+    "country": "US"
+  },
+  {
+    "id": "adobe",
+    "slug": "adobe",
+    "name": "Adobe",
+    "careersUrl": "https://careers.adobe.com",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7.5,
+    "avgPackageLpa": 23,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "adobe",
+    "site": "External_Career_Site",
+    "host": null,
+    "industry": "software",
+    "city": "San Jose",
+    "country": "US"
+  },
+  {
+    "id": "freshworks",
+    "slug": "freshworks",
+    "name": "Freshworks",
+    "careersUrl": "https://careers.freshworks.com",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7,
+    "avgPackageLpa": 15,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "freshworks",
+    "site": "Freshworks_Careers",
+    "host": null,
+    "industry": "saas",
+    "city": "Chennai",
+    "country": "IN"
+  },
+  {
+    "id": "salesforce",
+    "slug": "salesforce",
+    "name": "Salesforce",
+    "careersUrl": "https://careers.salesforce.com",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7.5,
+    "avgPackageLpa": 22,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "salesforce",
+    "site": "External_Career_Site",
+    "host": null,
+    "industry": "saas",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "servicenow",
+    "slug": "servicenow",
+    "name": "ServiceNow",
+    "careersUrl": "https://careers.servicenow.com",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7.5,
+    "avgPackageLpa": 21,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "servicenow",
+    "site": "External",
+    "host": null,
+    "industry": "saas",
+    "city": "Santa Clara",
+    "country": "US"
+  },
+  {
+    "id": "vmware",
+    "slug": "vmware",
+    "name": "VMware",
+    "careersUrl": "https://vmware.wd1.myworkdayjobs.com/VMware",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7.5,
+    "avgPackageLpa": 20,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "vmware",
+    "site": "VMware",
+    "host": null,
+    "industry": "cloud",
+    "city": "Palo Alto",
+    "country": "US"
+  },
+  {
+    "id": "walmart-global-tech",
+    "slug": "walmart-global-tech",
+    "name": "Walmart Global Tech",
+    "careersUrl": "https://careers.walmart.com",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7,
+    "avgPackageLpa": 18,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "walmart",
+    "site": "WalmartExternal",
+    "host": null,
+    "industry": "retail-tech",
+    "city": "Bentonville",
+    "country": "US"
+  },
+  {
+    "id": "visa",
+    "slug": "visa",
+    "name": "Visa",
+    "careersUrl": "https://corporate.visa.com/en/careers.html",
+    "category": "bfsi",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7.5,
+    "avgPackageLpa": 20,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "visa",
+    "site": "Visa",
+    "host": null,
+    "industry": "payments",
+    "city": "Foster City",
+    "country": "US"
+  },
+  {
+    "id": "qualcomm",
+    "slug": "qualcomm",
+    "name": "Qualcomm",
+    "careersUrl": "https://careers.qualcomm.com",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics",
+      "Electrical"
+    ],
+    "minCgpa": 7,
+    "avgPackageLpa": 18,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "qualcomm",
+    "site": "External",
+    "host": null,
+    "industry": "semiconductor",
+    "city": "San Diego",
+    "country": "US"
+  },
+  {
+    "id": "cisco",
+    "slug": "cisco",
+    "name": "Cisco",
+    "careersUrl": "https://jobs.cisco.com",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics",
+      "Electrical"
+    ],
+    "minCgpa": 7,
+    "avgPackageLpa": 17,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "cisco",
+    "site": "External",
+    "host": null,
+    "industry": "networking",
+    "city": "San Jose",
+    "country": "US"
+  },
+  {
+    "id": "intuit",
+    "slug": "intuit",
+    "name": "Intuit",
+    "careersUrl": "https://careers.intuit.com",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7.5,
+    "avgPackageLpa": 22,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "intuit",
+    "site": "External",
+    "host": null,
+    "industry": "fintech",
+    "city": "Mountain View",
+    "country": "US"
+  },
+  {
+    "id": "honeywell",
+    "slug": "honeywell",
+    "name": "Honeywell",
+    "careersUrl": "https://careers.honeywell.com",
+    "category": "core",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics",
+      "Electrical"
+    ],
+    "minCgpa": 6.5,
+    "avgPackageLpa": 11,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "honeywell",
+    "site": "Honeywell",
+    "host": null,
+    "industry": "industrial",
+    "city": "Charlotte",
+    "country": "US"
+  },
+  {
+    "id": "expedia",
+    "slug": "expedia",
+    "name": "Expedia",
+    "careersUrl": "https://careers.expediagroup.com",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "expedia",
+    "site": "Expedia_Group_External",
+    "host": null,
+    "industry": "travel",
+    "city": "Seattle",
+    "country": "US"
+  },
+  {
+    "id": "paypal",
+    "slug": "paypal",
+    "name": "PayPal",
+    "careersUrl": "https://paypal.wd1.myworkdayjobs.com/PayPal",
+    "category": "bfsi",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7.5,
+    "avgPackageLpa": 17,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "paypal",
+    "site": "PayPal",
+    "host": null,
+    "industry": "fintech",
+    "city": "San Jose",
+    "country": "US"
+  },
+  {
+    "id": "target",
+    "slug": "target",
+    "name": "Target",
+    "careersUrl": "https://corporate.target.com/careers",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7,
+    "avgPackageLpa": 16,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "workday",
+    "identifier": "target",
+    "site": "targetcareers",
+    "host": null,
+    "industry": "retail",
+    "city": "Minneapolis",
+    "country": "US"
+  },
+  {
+    "id": "capgemini",
+    "slug": "capgemini",
+    "name": "Capgemini",
+    "careersUrl": "https://careers.smartrecruiters.com/Capgemini",
+    "category": "it-service",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics",
+      "Electrical",
+      "Mechanical",
+      "Civil"
+    ],
+    "minCgpa": 6,
+    "avgPackageLpa": 4.5,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Capgemini",
+    "site": null,
+    "host": null,
+    "industry": "it-service",
+    "city": "Paris",
+    "country": "FR"
+  },
+  {
+    "id": "booking-com",
+    "slug": "booking-com",
+    "name": "Booking.com",
+    "careersUrl": "https://careers.smartrecruiters.com/Booking",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics"
+    ],
+    "minCgpa": 7.5,
+    "avgPackageLpa": 24,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Booking",
+    "site": null,
+    "host": null,
+    "industry": "travel",
+    "city": "Amsterdam",
+    "country": "NL"
+  },
+  {
+    "id": "canva",
+    "slug": "canva",
+    "name": "Canva",
+    "careersUrl": "https://careers.smartrecruiters.com/Canva",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Canva",
+    "site": null,
+    "host": null,
+    "industry": "design-tools",
+    "city": "Sydney",
+    "country": "AU"
+  },
+  {
+    "id": "unity",
+    "slug": "unity",
+    "name": "Unity",
+    "careersUrl": "https://careers.smartrecruiters.com/Unity3D",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Unity3D",
+    "site": null,
+    "host": null,
+    "industry": "gaming",
+    "city": "San Francisco",
+    "country": "US"
+  },
+  {
+    "id": "delivery-hero",
+    "slug": "delivery-hero",
+    "name": "Delivery Hero",
+    "careersUrl": "https://careers.smartrecruiters.com/DeliveryHero",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "DeliveryHero",
+    "site": null,
+    "host": null,
+    "industry": "food-delivery",
+    "city": "Berlin",
+    "country": "DE"
+  },
+  {
+    "id": "zalando",
+    "slug": "zalando",
+    "name": "Zalando",
+    "careersUrl": "https://careers.smartrecruiters.com/Zalando",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Zalando",
+    "site": null,
+    "host": null,
+    "industry": "ecommerce",
+    "city": "Berlin",
+    "country": "DE"
+  },
+  {
+    "id": "wise-tech-global",
+    "slug": "wise-tech-global",
+    "name": "WiseTech Global",
+    "careersUrl": "https://careers.smartrecruiters.com/WiseTechGlobal",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "WiseTechGlobal",
+    "site": null,
+    "host": null,
+    "industry": "logistics-tech",
+    "city": "Sydney",
+    "country": "AU"
+  },
+  {
+    "id": "publicis-sapient",
+    "slug": "publicis-sapient",
+    "name": "Publicis Sapient",
+    "careersUrl": "https://careers.smartrecruiters.com/PublicisSapient",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "PublicisSapient",
+    "site": null,
+    "host": null,
+    "industry": "consulting",
+    "city": "Chicago",
+    "country": "US"
+  },
+  {
+    "id": "bosch-group",
+    "slug": "bosch-group",
+    "name": "Bosch Group",
+    "careersUrl": "https://careers.smartrecruiters.com/BoschGroup",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "BoschGroup",
+    "site": null,
+    "host": null,
+    "industry": "industrial",
+    "city": "Stuttgart",
+    "country": "DE"
+  },
+  {
+    "id": "hm",
+    "slug": "hm",
+    "name": "H&M",
+    "careersUrl": "https://careers.smartrecruiters.com/HMGroup",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "HMGroup",
+    "site": null,
+    "host": null,
+    "industry": "retail",
+    "city": "Stockholm",
+    "country": "SE"
+  },
+  {
+    "id": "ikea",
+    "slug": "ikea",
+    "name": "IKEA",
+    "careersUrl": "https://careers.smartrecruiters.com/InterIKEAGroup",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "InterIKEAGroup",
+    "site": null,
+    "host": null,
+    "industry": "retail",
+    "city": "Delft",
+    "country": "NL"
+  },
+  {
+    "id": "wolt",
+    "slug": "wolt",
+    "name": "Wolt",
+    "careersUrl": "https://careers.smartrecruiters.com/Wolt",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Wolt",
+    "site": null,
+    "host": null,
+    "industry": "food-delivery",
+    "city": "Helsinki",
+    "country": "FI"
+  },
+  {
+    "id": "olx",
+    "slug": "olx",
+    "name": "OLX",
+    "careersUrl": "https://careers.smartrecruiters.com/OLX",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "OLX",
+    "site": null,
+    "host": null,
+    "industry": "marketplace",
+    "city": "Amsterdam",
+    "country": "NL"
+  },
+  {
+    "id": "rakuten",
+    "slug": "rakuten",
+    "name": "Rakuten",
+    "careersUrl": "https://careers.smartrecruiters.com/Rakuten",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Rakuten",
+    "site": null,
+    "host": null,
+    "industry": "ecommerce",
+    "city": "Tokyo",
+    "country": "JP"
+  },
+  {
+    "id": "visa-europe",
+    "slug": "visa-europe",
+    "name": "Visa Europe",
+    "careersUrl": "https://careers.smartrecruiters.com/Visa",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Visa",
+    "site": null,
+    "host": null,
+    "industry": "payments",
+    "city": "London",
+    "country": "UK"
+  },
+  {
+    "id": "jll",
+    "slug": "jll",
+    "name": "JLL",
+    "careersUrl": "https://careers.smartrecruiters.com/JLL",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "JLL",
+    "site": null,
+    "host": null,
+    "industry": "real-estate",
+    "city": "Chicago",
+    "country": "US"
+  },
+  {
+    "id": "aviv-group",
+    "slug": "aviv-group",
+    "name": "AVIV Group",
+    "careersUrl": "https://careers.smartrecruiters.com/AVIVGroup",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "AVIVGroup",
+    "site": null,
+    "host": null,
+    "industry": "proptech",
+    "city": "Berlin",
+    "country": "DE"
+  },
+  {
+    "id": "nagarro",
+    "slug": "nagarro",
+    "name": "Nagarro",
+    "careersUrl": "https://careers.smartrecruiters.com/Nagarro",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Nagarro",
+    "site": null,
+    "host": null,
+    "industry": "it-service",
+    "city": "Munich",
+    "country": "DE"
+  },
+  {
+    "id": "wpp",
+    "slug": "wpp",
+    "name": "WPP",
+    "careersUrl": "https://careers.smartrecruiters.com/WPP",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "WPP",
+    "site": null,
+    "host": null,
+    "industry": "media",
+    "city": "London",
+    "country": "UK"
+  },
+  {
+    "id": "uberall",
+    "slug": "uberall",
+    "name": "Uberall",
+    "careersUrl": "https://careers.smartrecruiters.com/Uberall",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Uberall",
+    "site": null,
+    "host": null,
+    "industry": "saas",
+    "city": "Berlin",
+    "country": "DE"
+  },
+  {
+    "id": "personio",
+    "slug": "personio",
+    "name": "Personio",
+    "careersUrl": "https://careers.smartrecruiters.com/Personio",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Personio",
+    "site": null,
+    "host": null,
+    "industry": "hr-tech",
+    "city": "Munich",
+    "country": "DE"
+  },
+  {
+    "id": "hellofresh",
+    "slug": "hellofresh",
+    "name": "HelloFresh",
+    "careersUrl": "https://careers.smartrecruiters.com/HelloFresh",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "HelloFresh",
+    "site": null,
+    "host": null,
+    "industry": "foodtech",
+    "city": "Berlin",
+    "country": "DE"
+  },
+  {
+    "id": "remitly",
+    "slug": "remitly",
+    "name": "Remitly",
+    "careersUrl": "https://careers.smartrecruiters.com/Remitly",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Remitly",
+    "site": null,
+    "host": null,
+    "industry": "fintech",
+    "city": "Seattle",
+    "country": "US"
+  },
+  {
+    "id": "travelperk",
+    "slug": "travelperk",
+    "name": "TravelPerk",
+    "careersUrl": "https://careers.smartrecruiters.com/TravelPerk",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "TravelPerk",
+    "site": null,
+    "host": null,
+    "industry": "travel",
+    "city": "Barcelona",
+    "country": "ES"
+  },
+  {
+    "id": "klarna",
+    "slug": "klarna",
+    "name": "Klarna",
+    "careersUrl": "https://careers.smartrecruiters.com/Klarna",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Klarna",
+    "site": null,
+    "host": null,
+    "industry": "fintech",
+    "city": "Stockholm",
+    "country": "SE"
+  },
+  {
+    "id": "leica-geosystems",
+    "slug": "leica-geosystems",
+    "name": "Leica Geosystems",
+    "careersUrl": "https://careers.smartrecruiters.com/LeicaGeosystems",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "LeicaGeosystems",
+    "site": null,
+    "host": null,
+    "industry": "hardware",
+    "city": "Heerbrugg",
+    "country": "CH"
+  },
+  {
+    "id": "eurofins",
+    "slug": "eurofins",
+    "name": "Eurofins",
+    "careersUrl": "https://careers.smartrecruiters.com/Eurofins",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Eurofins",
+    "site": null,
+    "host": null,
+    "industry": "biotech",
+    "city": "Luxembourg",
+    "country": "LU"
+  },
+  {
+    "id": "adidas",
+    "slug": "adidas",
+    "name": "Adidas",
+    "careersUrl": "https://careers.smartrecruiters.com/adidas",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "adidas",
+    "site": null,
+    "host": null,
+    "industry": "retail",
+    "city": "Herzogenaurach",
+    "country": "DE"
+  },
+  {
+    "id": "sephora",
+    "slug": "sephora",
+    "name": "Sephora",
+    "careersUrl": "https://careers.smartrecruiters.com/Sephora",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Sephora",
+    "site": null,
+    "host": null,
+    "industry": "retail",
+    "city": "Paris",
+    "country": "FR"
+  },
+  {
+    "id": "loreal",
+    "slug": "loreal",
+    "name": "L'Oreal",
+    "careersUrl": "https://careers.smartrecruiters.com/Loreal",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Loreal",
+    "site": null,
+    "host": null,
+    "industry": "consumer",
+    "city": "Paris",
+    "country": "FR"
+  },
+  {
+    "id": "schneider-electric",
+    "slug": "schneider-electric",
+    "name": "Schneider Electric",
+    "careersUrl": "https://careers.smartrecruiters.com/SchneiderElectric",
+    "category": "core",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology",
+      "Electronics",
+      "Electrical"
+    ],
+    "minCgpa": 6.5,
+    "avgPackageLpa": 8.5,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "SchneiderElectric",
+    "site": null,
+    "host": null,
+    "industry": "industrial",
+    "city": "Rueil-Malmaison",
+    "country": "FR"
+  },
+  {
+    "id": "axa",
+    "slug": "axa",
+    "name": "AXA",
+    "careersUrl": "https://careers.smartrecruiters.com/AXA",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "AXA",
+    "site": null,
+    "host": null,
+    "industry": "insurance",
+    "city": "Paris",
+    "country": "FR"
+  },
+  {
+    "id": "siemens-healthineers",
+    "slug": "siemens-healthineers",
+    "name": "Siemens Healthineers",
+    "careersUrl": "https://careers.smartrecruiters.com/SiemensHealthineers",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "SiemensHealthineers",
+    "site": null,
+    "host": null,
+    "industry": "healthtech",
+    "city": "Erlangen",
+    "country": "DE"
+  },
+  {
+    "id": "bolt",
+    "slug": "bolt",
+    "name": "Bolt",
+    "careersUrl": "https://careers.smartrecruiters.com/Bolt",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "Bolt",
+    "site": null,
+    "host": null,
+    "industry": "mobility",
+    "city": "Tallinn",
+    "country": "EE"
+  },
+  {
+    "id": "inpost",
+    "slug": "inpost",
+    "name": "InPost",
+    "careersUrl": "https://careers.smartrecruiters.com/InPost",
+    "category": "it-product",
+    "eligibleBranches": [
+      "Computer Science",
+      "Information Technology"
+    ],
+    "minCgpa": null,
+    "avgPackageLpa": null,
+    "source": "careerpilot-catalog",
+    "urlVerifiedAt": "2026-06-10T00:00:00.000Z",
+    "isActive": true,
+    "ats": "smartrecruiters",
+    "identifier": "InPost",
+    "site": null,
+    "host": null,
+    "industry": "logistics",
+    "city": "Krakow",
+    "country": "PL"
+  }
+];

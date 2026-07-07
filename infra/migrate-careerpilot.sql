@@ -151,32 +151,38 @@ ALTER TABLE candidate_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE students ENABLE ROW LEVEL SECURITY;
 
 -- candidate_profiles: a user can only see/edit their own row
+DROP POLICY IF EXISTS "candidate can view own profile" ON candidate_profiles;
 CREATE POLICY "candidate can view own profile"
   ON candidate_profiles
   FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "candidate can update own profile" ON candidate_profiles;
 CREATE POLICY "candidate can update own profile"
   ON candidate_profiles
   FOR UPDATE
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "candidate can insert own profile" ON candidate_profiles;
 CREATE POLICY "candidate can insert own profile"
   ON candidate_profiles
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- students: same pattern (students table PK is "id" of type text representing the auth.uid())
+DROP POLICY IF EXISTS "student can view own row" ON students;
 CREATE POLICY "student can view own row"
   ON students
   FOR SELECT
   USING (auth.uid()::text = id);
 
+DROP POLICY IF EXISTS "student can update own row" ON students;
 CREATE POLICY "student can update own row"
   ON students
   FOR UPDATE
   USING (auth.uid()::text = id);
 
+DROP POLICY IF EXISTS "student can insert own row" ON students;
 CREATE POLICY "student can insert own row"
   ON students
   FOR INSERT

@@ -221,50 +221,7 @@ export default function DashboardOverview({
         )}
       </section>
  
-      {/* 5. Recent Activity Feed Panel */}
-      <section className="panel" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-        <div className="panel-header" style={{ marginBottom: 0 }}>
-          <div>
-            <div className="section-label">Context</div>
-            <h2>Recent Activity</h2>
-          </div>
-        </div>
- 
-        {dashboardSummary.recentActivity.length === 0 ? (
-          <p className="panel-note" style={{ padding: "12px 0" }}>No recent watchlist activity.</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            {dashboardSummary.recentActivity.map((act, index) => {
-              const isFailed = act.message.toLowerCase().includes("fail");
-              return (
-                <div 
-                  key={index} 
-                  style={{ 
-                    display: "flex", 
-                    alignItems: "center", 
-                    gap: "12px", 
-                    padding: "10px 14px", 
-                    borderRadius: "6px", 
-                    background: "var(--surface-muted)",
-                    fontSize: "0.88rem"
-                  }}
-                >
-                  <span style={{ fontSize: "1.1rem" }}>
-                    {isFailed ? "🔴" : "🟢"}
-                  </span>
-                  <div style={{ flex: 1 }}>
-                    <strong style={{ color: "var(--text)" }}>{act.companyName}</strong>
-                    <span style={{ color: "var(--muted)", marginLeft: "8px" }}>{act.message}</span>
-                  </div>
-                  <span className="metric-footnote" style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-                    {act.timeAgo}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+
  
       {/* 6. Recommended Actions */}
       <section style={{ display: "flex", flexDirection: "column", gap: "16px" }}>

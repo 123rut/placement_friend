@@ -597,30 +597,7 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
         </div>
       </div>
 
-      {/* 3. Recent Changes (Last 24 Hours) */}
-      {data.recentChanges.length > 0 && (
-        <div 
-          style={{ 
-            display: "flex", 
-            alignItems: "center", 
-            gap: "12px", 
-            padding: "10px 16px", 
-            background: "var(--accent-soft)", 
-            borderRadius: "var(--radius)", 
-            fontSize: "0.85rem",
-            border: "1px solid var(--line)"
-          }}
-        >
-          <strong style={{ color: "var(--accent)" }}>Recent Changes (24h):</strong>
-          <div style={{ display: "flex", gap: "16px", overflowX: "auto", whiteSpace: "nowrap", flex: 1, paddingBottom: "2px" }}>
-            {data.recentChanges.map((change, idx) => (
-              <span key={idx} style={{ color: "var(--text)" }}>
-                ⚡ {change.companyName}: <strong>{change.label}</strong> ({change.timeAgo})
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       {/* Main stacked sections */}
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>

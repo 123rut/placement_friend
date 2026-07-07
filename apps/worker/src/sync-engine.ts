@@ -8,7 +8,7 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import pg from "pg";
-import { CompanySeed, companySeedData } from "./company-registry.js";
+import { CompanySeed } from "./company-registry.js";
 import { fetchGreenhouseJobs } from "./ats/greenhouse-v2.js";
 import { fetchLeverJobs } from "./ats/lever-v2.js";
 import { fetchAshbyJobs } from "./ats/ashby.js";
@@ -134,61 +134,19 @@ async function upsertJobs(jobs: NormalizedJob[], companyId: string): Promise<{ t
   return { total: jobs.length, newCount };
 }
 
-// ── Seed companies into DB ────────────────────────────────────────
-export async function seedCompaniesIntoDB(): Promise<void> {
-  console.log(`Seeding ${companySeedData.length} companies into DB...`);
 
-  for (const company of companySeedData) {
-    await pool.query(
-      `INSERT INTO companies (id, name, slug, careers_url, category, eligible_branches, source, ats, identifier, ats_host, site, industry, city, country, sync_status, is_active, is_global, region, added_by)
-       VALUES ($1, $2, $3, $4, 'it-product', '{}', 'seed', $5, $6, $7, $8, $9, $10, $11, 'pending', TRUE, TRUE, $11, 'agent')
-       ON CONFLICT (id) DO UPDATE SET
-         ats = $5, identifier = $6, ats_host = $7, site = $8, industry = $9, city = $10, country = $11`,
-      [
-        company.id,
-        company.name,
-        company.id,
-        company.careerUrl,
-        company.ats,
-        company.identifier,
-        workdayHostFor(company),
-        company.site || null,
-        company.industry,
-        company.city,
-        company.country,
-      ]
-    );
-  }
-
-  console.log("✓ Companies seeded.");
-}
-
-function workdayHostFor(company: CompanySeed): string | null {
-  if (company.ats !== "workday") {
-    return null;
-  }
-
-  if (company.host) {
-    return company.host;
-  }
-
-  try {
-    const host = new URL(company.careerUrl).host;
-    if (host.includes("myworkdayjobs.com")) {
-      return host;
-    }
-  } catch {
-    // Fall through to the common Workday host pattern.
-  }
-
-  return `${company.identifier}.wd1.myworkdayjobs.com`;
-}
 
 // ── Main sync loop ────────────────────────────────────────────────
 export async function syncAllCompanies(companyIds?: string[]): Promise<void> {
-  const companies = companyIds
-    ? companySeedData.filter(c => companyIds.includes(c.id))
-    : companySeedData;
+  let queryStr = `SELECT * FROM companies WHERE is_active = TRUE AND ats IS NOT NULL`;
+  const params: any[] = [];
+  if (companyIds && companyIds.length > 0) {
+    queryStr += ` AND id = ANY($1)`;
+    params.push(companyIds);
+  }
+
+  const res = await pool.query(queryStr, params);
+  const companies = res.rows;
 
   console.log(`\n🔄 Starting sync for ${companies.length} companies...`);
 
@@ -248,7 +206,8 @@ if (isMain) {
   const args = process.argv.slice(2);
 
   if (args[0] === "seed") {
-    seedCompaniesIntoDB().then(() => pool.end()).catch(console.error);
+    console.log("Database seeding must be run through the main bootstrap script: npm run db:init");
+    pool.end();
   } else {
     // Sync specific companies if IDs passed, else all
     const ids = args.length > 0 ? args : undefined;
