@@ -1,99 +1,17 @@
 import { URL, fileURLToPath } from "url";
 import path from "path";
 import dotenv from "dotenv";
-import { fetchWithTimeout } from "./fetchWithTimeout";
+import {
+  detectRedirect,
+  getAtsProviderFromUrl,
+  fetchWithTimeout
+} from "@piaa/domain";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, "../../../.env.local") });
 
-/**
- * Resolves redirects up to a depth of 5 and classifies them.
- */
-export async function detectRedirect(urlStr: string): Promise<{
-  originalUrl: string;
-  finalUrl: string;
-  sameDomain: boolean;
-  crossDomain: boolean;
-  isATS: boolean;
-  atsProvider: string | null;
-}> {
-  let currentUrl = urlStr;
-  let redirectDepth = 0;
-  const maxDepth = 5;
-  const visited = new Set<string>();
-
-  while (redirectDepth < maxDepth) {
-    visited.add(currentUrl);
-    try {
-      const response = await fetchWithTimeout(currentUrl, {
-        method: "GET",
-        redirect: "manual",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        },
-        timeout: 10000
-      });
-
-      if ([301, 302, 303, 307, 308].includes(response.status)) {
-        const location = response.headers.get("location");
-        if (location) {
-          const resolvedLoc = new URL(location, currentUrl).toString();
-          if (visited.has(resolvedLoc)) {
-            throw new Error("redirect_loop");
-          }
-          currentUrl = resolvedLoc;
-          redirectDepth++;
-          continue;
-        }
-      }
-      break;
-    } catch (err: any) {
-      if (err.message === "redirect_loop") {
-        throw err;
-      }
-      break;
-    }
-  }
-
-  const origHost = new URL(urlStr).hostname.toLowerCase();
-  const finalHost = new URL(currentUrl).hostname.toLowerCase();
-  const sameDomain = origHost === finalHost || finalHost.endsWith("." + origHost) || origHost.endsWith("." + finalHost);
-
-  const atsProvider = getAtsProviderFromUrl(currentUrl);
-  const isATS = atsProvider !== null;
-
-  return {
-    originalUrl: urlStr,
-    finalUrl: currentUrl,
-    sameDomain,
-    crossDomain: !sameDomain,
-    isATS,
-    atsProvider
-  };
-}
-
-/**
- * Checks if a hostname matches supported ATS provider domains.
- */
-export function getAtsProviderFromUrl(urlStr: string): string | null {
-  try {
-    const host = new URL(urlStr).hostname.toLowerCase();
-    if (host.includes("greenhouse.io") || host.includes("boards.greenhouse")) return "greenhouse";
-    if (host.includes("lever.co") || host.includes("jobs.lever")) return "lever";
-    if (host.includes("myworkdayjobs.com")) return "workday";
-    if (host.includes("taleo.net")) return "taleo";
-    if (host.includes("smartrecruiters.com")) return "smartrecruiters";
-    if (host.includes("amazon.jobs")) return "amazon";
-
-    // Custom Greenhouse domains
-    const customGreenhouseDomains = ["atlassian.com", "gojek.io", "swiggy.com", "cred.club", "meesho.io"];
-    if (customGreenhouseDomains.some(domain => host === domain || host.endsWith("." + domain))) {
-      return "greenhouse";
-    }
-  } catch {}
-  return null;
-}
+export { detectRedirect, getAtsProviderFromUrl };
 
 /**
  * Identifies the ATS provider from URL patterns or meta tags/script keywords.

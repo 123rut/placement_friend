@@ -1,4 +1,4 @@
-import type { Opportunity, OpportunityMatch, ScrapedOpportunityInput, StudentProfile } from "./types";
+import type { Opportunity, OpportunityMatch, ScrapedOpportunityInput, StudentProfile } from "./types.js";
 
 const normalizeText = (value: string) => value.trim().toLowerCase();
 

@@ -27,6 +27,8 @@ interface Metadata {
   totalPages: number;
 }
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+
 export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [metadata, setMetadata] = useState<Metadata>({ total: 0, page: 1, limit: 10, totalPages: 1 });
@@ -61,7 +63,7 @@ export default function CompaniesPage() {
         search: currentSearch,
         status: currentStatus
       });
-      const res = await fetch(`/api/companies?${query}`);
+      const res = await fetch(`${API_BASE_URL}/companies?${query}`);
       if (res.ok) {
         const result = await res.json();
         setCompanies(result.data || []);
@@ -143,7 +145,7 @@ export default function CompaniesPage() {
   const handleAddCompanySubmit = async (confirmOverride = false) => {
     setFormAlert(null);
     try {
-      const res = await fetch("/api/companies", {
+      const res = await fetch(`${API_BASE_URL}/companies`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -207,7 +209,7 @@ export default function CompaniesPage() {
   const handleSaveUrl = async (companyId: string, confirmOverride = false) => {
     setInlineAlert(null);
     try {
-      const res = await fetch(`/api/companies/${companyId}`, {
+      const res = await fetch(`${API_BASE_URL}/companies/${companyId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -282,7 +284,7 @@ export default function CompaniesPage() {
   const handleToggleStatus = async (company: Company) => {
     const targetStatus = company.status === "paused" ? "active" : "paused";
     try {
-      const res = await fetch(`/api/companies/${company.id}`, {
+      const res = await fetch(`${API_BASE_URL}/companies/${company.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: targetStatus })
@@ -299,7 +301,7 @@ export default function CompaniesPage() {
   const handleArchiveCompany = async (id: string) => {
     if (!confirm("Are you sure you want to archive this company? Archived targets are excluded from active crawls.")) return;
     try {
-      const res = await fetch(`/api/companies/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/companies/${id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -313,7 +315,7 @@ export default function CompaniesPage() {
   // Quick Action: Restore Archived
   const handleRestoreCompany = async (id: string) => {
     try {
-      const res = await fetch(`/api/companies/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/companies/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "active" })

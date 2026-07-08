@@ -1,4 +1,4 @@
-import type { College } from "./types";
+import type { College } from "./types.js";
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
