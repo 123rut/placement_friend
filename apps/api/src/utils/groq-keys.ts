@@ -9,6 +9,7 @@ export async function fetchGroqWithRotation(
     process.env.GROQ_API_KEY,
     process.env.GROQ_API_KEY_2,
     process.env.GROQ_API_KEY_3,
+    process.env.GROQ_API_KEY_4,
   ].filter(Boolean) as string[];
 
   if (keys.length === 0) {

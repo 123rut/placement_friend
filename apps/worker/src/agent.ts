@@ -100,6 +100,7 @@ export async function extractOpportunities(
     process.env.GROQ_API_KEY,
     process.env.GROQ_API_KEY_2,
     process.env.GROQ_API_KEY_3,
+    process.env.GROQ_API_KEY_4,
   ].filter(Boolean) as string[];
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
   const geminiApiKey = process.env.GEMINI_API_KEY;
