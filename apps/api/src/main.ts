@@ -6,7 +6,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix("api");
   app.enableCors({
-    origin: process.env.WEB_ORIGIN || "http://localhost:3000",
+    origin: process.env.NODE_ENV === "production"
+      ? (process.env.WEB_ORIGIN ? process.env.WEB_ORIGIN.split(",") : [])
+      : (process.env.WEB_ORIGIN || "http://localhost:3000"),
     credentials: true,
   });
 
@@ -19,6 +21,9 @@ async function bootstrap() {
   }
 
   app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path.startsWith("/api/companies")) {
+      return next();
+    }
     const key = req.header("x-internal-key");
     if (internalApiKey && key !== internalApiKey) {
       return res.status(401).json({ error: "Unauthorized" });

@@ -7,6 +7,7 @@ import { ResumeModule } from "./resume/resume.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { AgentModule } from "./agent/agent.module";
 import { CompaniesModule } from './companies/companies.module';
+import { PortalModule } from './portal/portal.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { CompaniesModule } from './companies/companies.module';
     JobsModule,
     AgentModule,
     CompaniesModule,
+    PortalModule,
   ],
   controllers: [AppController],
   providers: [AppService],
