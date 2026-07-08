@@ -1,29 +1,27 @@
 import { redirect } from "next/navigation";
-import { colleges, seedCompanies } from "@piaa/domain";
-import { SprintOneShell } from "./sprint-one-shell";
 import { createClient } from "../lib/supabase/server";
 
 export default async function HomePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // 1. Redirect immediately if not authenticated
   if (!user) {
     redirect("/login");
   }
 
-  // Check if student profile exists
+  // 2. Query students table for profile existence
   const { data: studentProfile } = await supabase
     .from("students")
     .select("*")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
-  return (
-    <SprintOneShell
-      colleges={colleges}
-      companies={seedCompanies}
-      user={user}
-      existingProfile={studentProfile}
-    />
-  );
+  // 3. Redirect to dashboard if profile exists, otherwise to profile setup
+  if (studentProfile) {
+    redirect("/dashboard");
+  } else {
+    redirect("/profile");
+  }
 }
+

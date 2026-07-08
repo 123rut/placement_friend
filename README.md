@@ -1,143 +1,203 @@
-# Placement Friend
+# Carrierpilot
 
-A SaaS platform that helps students discover placement drives and internships before deadlines pass. Built with TypeScript, JavaScript, and modern web technologies.
+Placement Friend is a SaaS platform that helps students discover placement drives, internships, and early-career roles before deadlines pass.
 
-## Overview
+The current product experience is powered by CareerPilot AI: a resume-aware career agent that combines student profiles, ATS job ingestion, eligibility matching, semantic search, fit scoring, and actionable guidance.
 
-Placement & Internship Alert Agent centralizes company career-page tracking, student eligibility matching, and timely notifications to ensure students never miss an opportunity.
+## What It Does
 
-## Tech Stack
-
-- **TypeScript** - 48.5% (Type-safe backend and frontend logic)
-- **JavaScript** - 43.9% (Frontend frameworks and utilities)
-- **CSS** - 7.6% (Responsive UI styling)
-- **Next.js** - Frontend framework
-- **Supabase/PostgreSQL** - Database and authentication
-
-## Current Status (Sprint 1 ✅)
-
-- ✅ College-email-first onboarding with domain-to-college mapping
-- ✅ Student profile setup for branch, CGPA, and batch year
-- ✅ Top 100 seeded companies with category, eligibility, and package metadata
-- ✅ PRD-aligned SQL schema and seed files for Supabase/PostgreSQL
-- ✅ Foundation dashboard and API routes for colleges and companies
-
-## Full MVP Scope
-
-- 🎯 Authentication with college email
-- 🎯 Student profile management
-- 🎯 Company tracking and discovery
-- 🎯 Opportunity scraping and deduplication
-- 🎯 Eligibility matching
-- 🎯 Timely notifications
-- 🎯 Upcoming drives dashboard
+- Authenticates students with Supabase-backed sessions.
+- Stores academic profile details such as college, branch, CGPA, and batch year.
+- Tracks company career pages and ATS boards.
+- Syncs jobs from supported ATS providers into PostgreSQL.
+- Parses resumes from PDF or DOCX uploads.
+- Matches opportunities against resume, eligibility, and preferences.
+- Provides AI-assisted career planning through the CareerPilot agent.
+- Supports watchlists, notification preferences, and opportunity dashboards.
 
 ## Repository Structure
 
-```
-placement_friend/
-├── apps/
-│   ├── web/              # Student-facing Next.js application
-│   └── worker/           # Scraping and notification orchestration
-├── packages/
-│   └── domain/           # Shared domain types and business logic
-├── docs/                 # Product and architecture documentation
-├── infra/                # SQL schema and seed data
-├── package.json
-└── README.md
-```
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js (v16.0.0 or higher)
-- npm or yarn
-- Supabase account (for database)
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/123rut/placement_friend.git
-cd placement_friend
+```text
+apps/
+  api/       NestJS API for resumes, jobs, matching, agent chat, and sync triggers
+  web/       Next.js frontend and server-side proxy API routes
+  worker/    ATS adapters, scraping, scheduling, matching, and notifications
+packages/
+  domain/    Shared domain types, company catalog, and eligibility helpers
+infra/       PostgreSQL/Supabase schema, seed data, and database init scripts
+docs/        Product and architecture notes
+scripts/     Validation and utility scripts
 ```
 
-2. Install dependencies:
+## Tech Stack
+
+- Node.js and npm workspaces
+- TypeScript
+- Next.js
+- NestJS
+- Supabase Auth
+- PostgreSQL/Supabase
+- pgvector for embedding search
+- Groq for LLM extraction/planning
+- Gemini for embeddings and optional fallback parsing
+- Playwright/Cheerio-based worker foundations
+
+## Prerequisites
+
+- Node.js 20 or newer
+- npm
+- PostgreSQL or Supabase project
+- Optional Groq and Gemini API keys for richer AI workflows
+
+## Environment
+
+Create a root `.env.local` file:
+
+```env
+DATABASE_URL=postgresql://postgres:password@host:5432/postgres
+
+# Required for production server-to-server API calls
+INTERNAL_API_KEY=
+WEB_ORIGIN=http://localhost:3000
+
+# Optional AI providers
+GROQ_API_KEY=
+GROQ_API_KEY_2=
+GROQ_API_KEY_3=
+GEMINI_API_KEY=
+
+# Web/Supabase
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+CAREERPILOT_API_URL=http://127.0.0.1:4000/api
+
+# Worker settings
+STUDENT_ID=
+LOGGED_IN_STUDENT_ID=
+SCRAPER_POLL_INTERVAL_MS=3600000
+NOTIFIER_ENABLED=true
+FIRECRAWL_API_KEY=
+```
+
+`INTERNAL_API_KEY` is used only for server-to-server communication between the web proxy routes and the NestJS API. It must not be exposed to browser code.
+
+## Setup
+
+Install dependencies from the repository root:
+
 ```bash
 npm install
-# or
-yarn install
 ```
 
-3. Set up environment variables:
+Initialize the database:
+
 ```bash
-cp .env.example .env.local
+npm run db:init
 ```
 
-4. Configure your Supabase credentials in `.env.local`
+The init script loads `.env.local`, connects with `DATABASE_URL`, and applies the SQL files in `infra/`.
 
-5. Load the database schema:
+## Development
+
+Run the API:
+
 ```bash
-# Connect to your Supabase project and run:
-# - infra/seed_colleges.sql
-# - infra/seed_companies.sql
+npm run dev:api
 ```
 
-### Development
+The API listens at:
 
-Start the development server:
-```bash
-npm run dev
+```text
+http://localhost:4000/api
 ```
 
-The application will be available at `http://localhost:3000`
-
-### Build
+Run the web app:
 
 ```bash
+npm run dev:web
+```
+
+The web app listens at:
+
+```text
+http://localhost:3000
+```
+
+Run the worker:
+
+```bash
+npm run dev:worker
+```
+
+## Validation And Build
+
+Use these commands before deployment:
+
+```bash
+npm run lint
+npm run typecheck
 npm run build
+npm run validate:companies:metadata
 ```
 
-### Testing
+Live ATS validation requires network access:
 
 ```bash
-npm test
+npm run validate:companies
 ```
 
-## Next Steps (Sprint 2 & Beyond)
+The live validator checks each active company against its ATS provider and prints a grouped summary by provider and failure reason.
 
-1. Wire the Sprint 1 schema into a production Supabase project
-2. Replace mock onboarding state with Supabase Auth and persisted student records
-3. Implement career-page discovery and drive ingestion
-4. Build eligibility matching engine
-5. Set up notification system
+Run API tests:
 
-## Architecture Philosophy
+```bash
+npm --workspace api test -- --runInBand
+```
 
-- **Reliability First**: Focus on data accuracy and consistency
-- **Low Notification Noise**: Quality over quantity in alerts
-- **Clean Boundaries**: Clear separation between scraping, matching, and delivery
-- **Scalability**: Foundation for future social and recommendation features
+## Key API Routes
 
-## Contributing
+The NestJS API uses the global `/api` prefix.
 
-We welcome contributions! Please:
+- `POST /api/resume/parse`
+- `GET /api/resume/:userId`
+- `PUT /api/resume/:userId`
+- `POST /api/jobs/search`
+- `POST /api/jobs/match`
+- `GET /api/jobs/matches/:userId`
+- `POST /api/agent/chat`
+- `GET /api/agent/conversations/:userId`
+- `POST /api/worker/sync`
+- `POST /api/worker/sync/stop`
+- `GET /api/worker/sync/status`
+- `GET /api/worker/sync/logs`
+- `POST /api/worker/sync/:companyId`
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Supported ATS Providers
 
-## Support & Issues
+- Greenhouse
+- Lever
+- Ashby
+- Workday
+- SmartRecruiters
+- Amazon Jobs
 
-Found a bug? Have a feature request? Please [open an issue](https://github.com/123rut/placement_friend/issues) on GitHub.
+## Production Notes
 
-## License
+- Deploy the NestJS API with `INTERNAL_API_KEY` set.
+- Keep the NestJS API private or protected so only trusted server callers can reach it.
+- Configure `WEB_ORIGIN` to the deployed frontend origin.
+- Run metadata validation in CI.
+- Run live ATS validation from a networked environment before deployment.
+- Treat long-running sync as an operational workflow and monitor sync logs.
+- Do not commit `.env.local` or production secrets.
 
-This project is open source and available under the MIT License.
+## Workspace Ownership
 
----
+- `apps/web` owns the user-facing product and authenticated server proxy routes.
+- `apps/api` owns CareerPilot workflows, AI calls, resume parsing, matching, and sync triggers.
+- `apps/worker` owns background scraping, ATS adapters, and notification helpers.
+- `packages/domain` owns shared company and eligibility domain data.
 
-**Made for students, by developers.** Helping placement aspirants succeed! 🚀
+## Product Direction
+
+Placement Friend is the student-facing platform. CareerPilot AI is the intelligence layer inside it: resume-aware opportunity discovery, fit ranking, application planning, and company tracking.

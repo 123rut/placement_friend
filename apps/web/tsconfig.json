@@ -15,7 +15,8 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    "../worker/src/**/*.ts"
   ],
   "exclude": [
     "node_modules"

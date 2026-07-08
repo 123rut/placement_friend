@@ -6,9 +6,10 @@ export type CompanyCategory =
   | "core"
   | "consulting"
   | "bfsi"
-  | "startup";
+  | "startup"
+  | "company";
 
-export type CompanySource = "seed" | "user-added" | "crowdsourced";
+export type CompanySource = "seed" | "user-added" | "crowdsourced" | "careerpilot-catalog";
 
 export type NotificationChannel = "email" | "whatsapp" | "telegram" | "dashboard";
 
@@ -46,6 +47,14 @@ export type Company = {
   source: CompanySource;
   urlVerifiedAt: string | null;
   isActive: boolean;
+  ats?: string | null;
+  identifier?: string | null;
+  site?: string | null;
+  host?: string | null;
+  industry?: string | null;
+  city?: string | null;
+  country?: string | null;
+  logo?: string | null;
 };
 
 export type StudentCompanyTarget = {
