@@ -27,5 +27,8 @@
   "devDependencies": {
     "dotenv": "^17.4.2",
     "pg": "^8.21.0"
+  },
+  "dependencies": {
+    "string-similarity": "^4.0.4"
   }
 }
