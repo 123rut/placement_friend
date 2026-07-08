@@ -1,4 +1,4 @@
-# Carrierpilot
+# Careerpilot
 
 Placement Friend is a SaaS platform that helps students discover placement drives, internships, and early-career roles before deadlines pass.
 
@@ -179,7 +179,7 @@ The NestJS API uses the global `/api` prefix.
 - Ashby
 - Workday
 - SmartRecruiters
-- Amazon Jobs
+-
 
 ## Production Notes
 
