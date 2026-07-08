@@ -1,4 +1,5 @@
 import { Controller, Post, Get, Param, Body } from "@nestjs/common";
+
 import { SyncResult } from "../careerpilot.types";
 import { SyncService } from "./sync.service";
 
@@ -17,13 +18,16 @@ export class SyncController {
     return { success, failed, results };
   }
 
-  /** POST /api/worker/sync/:companyId — trigger sync for one company */
-  @Post(":companyId")
-  async syncOne(@Param("companyId") companyId: string): Promise<SyncResult | { error: string }> {
-    const companies = await this.syncService.getCompanies(false);
-    const company = companies.find((c: any) => c.id === companyId);
-    if (!company) return { error: `Company ${companyId} not found` };
-    return this.syncService.syncCompany(company);
+  /** POST /api/worker/sync/stop — MUST be before :companyId to avoid route conflict */
+  @Post("stop")
+  stopSync(): { message: string } {
+    return this.syncService.stopSync();
+  }
+
+  /** GET /api/worker/sync/status — MUST be before :companyId to avoid route conflict */
+  @Get("status")
+  getSyncStatus(): { isSyncing: boolean; cancelRequested: boolean } {
+    return this.syncService.getSyncStatus();
   }
 
   /** GET /api/worker/sync/logs — sync history */
@@ -36,5 +40,14 @@ export class SyncController {
   @Get("companies")
   async getCompanies(): Promise<Record<string, unknown>[]> {
     return this.syncService.getCompanies(false);
+  }
+
+  /** POST /api/worker/sync/:companyId — KEEP LAST — trigger sync for one company */
+  @Post(":companyId")
+  async syncOne(@Param("companyId") companyId: string): Promise<SyncResult | { error: string }> {
+    const companies = await this.syncService.getCompanies(false);
+    const company = companies.find((c: any) => c.id === companyId);
+    if (!company) return { error: `Company ${companyId} not found` };
+    return this.syncService.syncCompany(company);
   }
 }

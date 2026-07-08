@@ -105,14 +105,13 @@ Workflow rules:
 9. If a tool returns null or an error, explain the missing prerequisite and continue helpfully instead of pretending the tool succeeded.
 10. Never say that you searched jobs, scored matches, or read a resume unless a tool result in the conversation shows that happened.
 11. When recommending jobs, you MUST format each job using this exact structure:
-- [<title>](<url>) at <company>
-  Job ID: \`<id>\`
+- [<title>](<url>) at <company> <!-- fit-id: <id> -->
 
 Rules:
 - If "url" is missing or empty for a job, render the title as plain text (no brackets/link).
-- If "id" is missing or empty for a job, omit the "Job ID:" line entirely for that job.
-- Never invent, guess, or fabricate a URL or Job ID. Only use values provided in the retrieved job data.
-- Do not alter the Job ID value in any way (no truncation, no reformatting).`;
+- Never print or display any UUIDs, requisition codes, or job numbers (such as Job ID, System ID, or Job Code) in plain visible text.
+- Always include the comment `<!-- fit-id: <id> -->` exactly as shown at the end of each recommended job line if the id exists.
+- Never invent, guess, or fabricate a URL. Only use values provided in the retrieved job data.`;
 
 @Injectable()
 export class AgentService {
@@ -120,7 +119,7 @@ export class AgentService {
     @Inject(DB_POOL) private readonly pool: Pool,
     private readonly jobsService: JobsService,
     private readonly resumeService: ResumeService,
-  ) {}
+  ) { }
 
   private readonly tools: Record<string, AgentTool> = {
     read_resume: {
@@ -257,8 +256,7 @@ export class AgentService {
       return this.generateGroqFinalAnswer(groqMessages, toolsUsed);
     } catch (error) {
       console.warn(
-        `[CareerPilot Agent] Groq planner failed; trying backup planner: ${
-          error instanceof Error ? error.message : String(error)
+        `[CareerPilot Agent] Groq planner failed; trying backup planner: ${error instanceof Error ? error.message : String(error)
         }`,
       );
       return this.runBackupPlanner(userId, userMessage, history);
@@ -384,8 +382,7 @@ export class AgentService {
       }
     } catch (error) {
       console.warn(
-        `[CareerPilot Agent] Groq final-answer synthesis failed: ${
-          error instanceof Error ? error.message : String(error)
+        `[CareerPilot Agent] Groq final-answer synthesis failed: ${error instanceof Error ? error.message : String(error)
         }`,
       );
     }
@@ -442,8 +439,7 @@ ${formattedMessages}`,
       }
     } catch (error) {
       console.warn(
-        `[CareerPilot Agent] Gemini final-answer synthesis failed: ${
-          error instanceof Error ? error.message : String(error)
+        `[CareerPilot Agent] Gemini final-answer synthesis failed: ${error instanceof Error ? error.message : String(error)
         }`,
       );
     }

@@ -173,16 +173,6 @@ export default function PreferencesPanel({ initialTargets, onRefresh }: Preferen
                       />
                       <span style={{ fontSize: "0.9rem" }}>Email</span>
                     </label>
-
-                    <label className="toggle-label" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "not-allowed", opacity: 0.5 }}>
-                      <input
-                        type="checkbox"
-                        checked={false}
-                        disabled={true}
-                        style={{ cursor: "not-allowed", width: "16px", height: "16px" }}
-                      />
-                      <span style={{ fontSize: "0.9rem" }}>Slack (Unavailable)</span>
-                    </label>
                   </div>
                 )}
               </div>

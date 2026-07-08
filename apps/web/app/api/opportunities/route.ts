@@ -35,13 +35,22 @@ export async function GET() {
       return NextResponse.json({ data: [] }, { status: 200 });
     }
 
-    // Fetch drives for tracked companies
-    const drivesRes = await pool.query(
-      `SELECT d.*, c.name as company_name 
-       FROM drives d
-       JOIN companies c ON d.company_id = c.id
-       WHERE d.company_id = ANY($1::text[])
-       ORDER BY d.deadline ASC NULLS LAST, d.created_at DESC`,
+    // Fetch jobs for tracked companies
+    const jobsRes = await pool.query(
+      `SELECT j.id,
+              j.company_id,
+              j.title AS role,
+              j.employment_type AS role_type,
+              j.url AS apply_url,
+              j.created_at AS posted_at,
+              j.location,
+              c.name as company_name,
+              c.min_cgpa,
+              c.eligible_branches
+       FROM jobs j
+       JOIN companies c ON j.company_id = c.id
+       WHERE j.company_id = ANY($1::text[])
+       ORDER BY j.created_at DESC`,
       [trackedCompanyIds]
     );
 
@@ -60,35 +69,39 @@ export async function GET() {
 
     const matchedOpportunities = [];
 
-    for (const drive of drivesRes.rows) {
+    for (const job of jobsRes.rows) {
+      // Parse database branches constraint
+      const rawBranches = job.eligible_branches ? String(job.eligible_branches) : "";
+      const allowedBranches = rawBranches.replace(/[{}"']/g, "").split(",").map(b => b.trim()).filter(Boolean);
+
       const opportunity: Opportunity = {
-        id: drive.id,
-        companyId: drive.company_id,
-        title: drive.role,
-        roleType: drive.type === "internship" ? "internship" : "full-time",
-        location: "Bengaluru",
+        id: job.id,
+        companyId: job.company_id,
+        title: job.role,
+        roleType: job.role_type === "internship" ? "internship" : "full-time",
+        location: job.location || "Bengaluru",
         description: "",
-        applicationUrl: drive.apply_link,
-        sourceUrl: drive.apply_link,
-        deadline: drive.deadline ? drive.deadline.toISOString() : null,
-        minCgpa: drive.min_cgpa ? parseFloat(drive.min_cgpa) : null,
-        allowedBranches: drive.allowed_branches || [],
+        applicationUrl: job.apply_url,
+        sourceUrl: job.apply_url,
+        deadline: null,
+        minCgpa: job.min_cgpa ? parseFloat(job.min_cgpa) : null,
+        allowedBranches: allowedBranches,
         allowedBatchYears: [],
-        postedAt: drive.scraped_at.toISOString()
+        postedAt: job.posted_at ? job.posted_at.toISOString() : new Date().toISOString()
       };
 
       const match = matchStudentToOpportunity(studentProfile, opportunity);
       if (match.qualifies) {
         matchedOpportunities.push({
-          id: drive.id,
-          company_name: drive.company_name,
-          role: drive.role,
-          role_type: drive.type,
-          min_cgpa: drive.min_cgpa ? parseFloat(drive.min_cgpa) : null,
+          id: job.id,
+          company_name: job.company_name,
+          role: job.role,
+          role_type: job.role_type,
+          min_cgpa: job.min_cgpa ? parseFloat(job.min_cgpa) : null,
           allowed_branches: opportunity.allowedBranches,
-          deadline: drive.deadline,
-          apply_url: drive.apply_link,
-          posted_at: drive.scraped_at
+          deadline: null,
+          apply_url: job.apply_url,
+          posted_at: job.posted_at
         });
       }
     }

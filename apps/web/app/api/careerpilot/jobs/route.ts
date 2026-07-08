@@ -28,7 +28,7 @@ export async function GET() {
   }
 
   try {
-    const response = await fetch(`${getCareerPilotApiBaseUrl()}/jobs/matches/${user.id}`, {
+    const response = await fetch(`${getCareerPilotApiBaseUrl()}/jobs/matches/${user.id}?limit=100`, {
       method: "GET",
       cache: "no-store",
     });

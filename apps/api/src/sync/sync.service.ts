@@ -19,10 +19,26 @@ interface NormalizedJob {
 
 @Injectable()
 export class SyncService {
+  private cancelRequested = false;
+  private isSyncing = false;
+
   constructor(
     @Inject(DB_POOL) private readonly pool: Pool,
     private readonly jobsService: JobsService,
   ) {}
+
+  /** Signal the running syncAll loop to stop after the current company finishes. */
+  stopSync(): { message: string } {
+    if (!this.isSyncing) {
+      return { message: "No sync is currently running." };
+    }
+    this.cancelRequested = true;
+    return { message: "Stop signal sent. Sync will stop after the current company finishes." };
+  }
+
+  getSyncStatus(): { isSyncing: boolean; cancelRequested: boolean } {
+    return { isSyncing: this.isSyncing, cancelRequested: this.cancelRequested };
+  }
 
   async getCompanies(activeOnly = true) {
     const q = activeOnly
@@ -59,6 +75,8 @@ export class SyncService {
   }
 
   async syncAll(userId?: string): Promise<SyncResult[]> {
+    this.cancelRequested = false;
+    this.isSyncing = true;
     let studentProfile: any = null;
     let studentRecord: any = null;
     if (userId) {
@@ -128,7 +146,14 @@ export class SyncService {
 
       results.push(result);
       await new Promise((r) => setTimeout(r, 300));
+
+      if (this.cancelRequested) {
+        console.log("[Sync] Stop signal received. Stopping sync loop gracefully.");
+        break;
+      }
     }
+    this.isSyncing = false;
+    this.cancelRequested = false;
     return results;
   }
 

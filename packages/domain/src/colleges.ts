@@ -106,6 +106,30 @@ export const colleges: College[] = [
     city: "Pune",
     state: "Maharashtra",
     type: "government"
+  },
+  {
+    id: "email",
+    name: "Google",
+    emailDomain: "gmail.com",
+    city: "",
+    state: "",
+    type: "private"
+  },
+  {
+    id: "email",
+    name: "Outlook",
+    emailDomain: "outlook.com",
+    city: "",
+    state: "",
+    type: "private"
+  },
+  {
+    id: "email",
+    name: "Yahoo",
+    emailDomain: "yahoo.com",
+    city: "",
+    state: "",
+    type: "private"
   }
 ];
 

@@ -81,6 +81,12 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
 
   const studentCgpa = parseFloat(student.cgpa) || 0;
 
+  // Pagination states
+  const [matchPage, setMatchPage] = useState(0);
+  const [oppPage, setOppPage] = useState(0);
+  const ITEMS_PER_PAGE = 6; // Fits neatly in 2-column or 3-column layouts
+
+
   // Handle Match Score filtering + Search
   const filteredMatches = useMemo(() => {
     return matchedJobs.filter((job) => {
@@ -130,6 +136,28 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
       return true;
     });
   }, [scrapedOpps, search, onlyEligible, studentCgpa, student.branch]);
+
+  // Reset page numbers when search query or filter changes
+  React.useEffect(() => {
+    setMatchPage(0);
+  }, [search, minMatchScore]);
+
+  React.useEffect(() => {
+    setOppPage(0);
+  }, [search]);
+
+  // Paginate sliced lists
+  const paginatedMatches = useMemo(() => {
+    return filteredMatches.slice(matchPage * ITEMS_PER_PAGE, (matchPage + 1) * ITEMS_PER_PAGE);
+  }, [filteredMatches, matchPage]);
+
+  const paginatedOpps = useMemo(() => {
+    return filteredOpps.slice(oppPage * ITEMS_PER_PAGE, (oppPage + 1) * ITEMS_PER_PAGE);
+  }, [filteredOpps, oppPage]);
+
+  const totalMatchPages = Math.ceil(filteredMatches.length / ITEMS_PER_PAGE);
+  const totalOppPages = Math.ceil(filteredOpps.length / ITEMS_PER_PAGE);
+
 
   const handleRefresh = async () => {
     await Promise.all([mutateMatches(), mutateOpps()]);
@@ -205,56 +233,83 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
                 </p>
               </div>
             ) : (
-              <div className="opportunity-grid">
-                {filteredMatches.map((job) => (
-                  <article className="panel opportunity-card matched-job-card" key={job.id || job.job_id} style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                    <div>
-                      <div className="opportunity-topline">
-                        <div>
-                          <span className="section-label accent-label">{job.company_name}</span>
-                          <h3 className="opportunity-title">{job.title}</h3>
+              <>
+                <div className="opportunity-grid">
+                  {paginatedMatches.map((job) => (
+                    <article className="panel opportunity-card matched-job-card" key={job.id || job.job_id} style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                      <div>
+                        <div className="opportunity-topline">
+                          <div>
+                            <span className="section-label accent-label">{job.company_name}</span>
+                            <h3 className="opportunity-title">{job.title}</h3>
+                          </div>
+                          <span className="status-good" style={{ padding: "4px 10px", fontSize: "0.8rem" }}>
+                            {job.match_score === null ? "Matched" : `${Math.round(job.match_score)}% match`}
+                          </span>
                         </div>
-                        <span className="status-good" style={{ padding: "4px 10px", fontSize: "0.8rem" }}>
-                          {job.match_score === null ? "Matched" : `${Math.round(job.match_score)}% match`}
-                        </span>
+
+                        <p className="panel-note" style={{ marginTop: "12px", color: "var(--text)", fontSize: "0.88rem" }}>
+                          {job.explanation || "Calculated fit score matches candidate profile."}
+                        </p>
+
+                        <div className="opportunity-metadata" style={{ marginTop: "16px" }}>
+                          <div className="meta-row">
+                            <span>Location</span>
+                            <strong>{job.location || "Not listed"}</strong>
+                          </div>
+                          <div className="meta-row">
+                            <span>Strengths</span>
+                            <strong title={(job.strengths || []).join(", ")} style={{ color: "var(--good)" }}>
+                              {job.strengths && job.strengths.length > 0
+                                ? job.strengths.slice(0, 2).join(", ")
+                                : "Profile aligned"}
+                            </strong>
+                          </div>
+                          <div className="meta-row">
+                            <span>Gaps</span>
+                            <strong title={(job.missing_skills || []).join(", ")} style={{ color: job.missing_skills && job.missing_skills.length > 0 ? "var(--warn)" : "var(--muted)" }}>
+                              {job.missing_skills && job.missing_skills.length > 0
+                                ? job.missing_skills.slice(0, 2).join(", ")
+                                : "No major gaps"}
+                            </strong>
+                          </div>
+                        </div>
                       </div>
 
-                      <p className="panel-note" style={{ marginTop: "12px", color: "var(--text)", fontSize: "0.88rem" }}>
-                        {job.explanation || "Calculated fit score matches candidate profile."}
-                      </p>
-
-                      <div className="opportunity-metadata" style={{ marginTop: "16px" }}>
-                        <div className="meta-row">
-                          <span>Location</span>
-                          <strong>{job.location || "Not listed"}</strong>
-                        </div>
-                        <div className="meta-row">
-                          <span>Strengths</span>
-                          <strong title={(job.strengths || []).join(", ")} style={{ color: "var(--good)" }}>
-                            {job.strengths && job.strengths.length > 0
-                              ? job.strengths.slice(0, 2).join(", ")
-                              : "Profile aligned"}
-                          </strong>
-                        </div>
-                        <div className="meta-row">
-                          <span>Gaps</span>
-                          <strong title={(job.missing_skills || []).join(", ")} style={{ color: job.missing_skills && job.missing_skills.length > 0 ? "var(--warn)" : "var(--muted)" }}>
-                            {job.missing_skills && job.missing_skills.length > 0
-                              ? job.missing_skills.slice(0, 2).join(", ")
-                              : "No major gaps"}
-                          </strong>
-                        </div>
+                      <div className="opportunity-footer" style={{ marginTop: "18px" }}>
+                        <a href={job.url} target="_blank" rel="noopener noreferrer" className="primary-link" style={{ width: "100%", justifyContent: "center" }}>
+                          Open Role
+                        </a>
                       </div>
-                    </div>
+                    </article>
+                  ))}
+                </div>
 
-                    <div className="opportunity-footer" style={{ marginTop: "18px" }}>
-                      <a href={job.url} target="_blank" rel="noopener noreferrer" className="primary-link" style={{ width: "100%", justifyContent: "center" }}>
-                        Open Role
-                      </a>
-                    </div>
-                  </article>
-                ))}
-              </div>
+                {/* Recommendations Pagination Controls */}
+                {totalMatchPages > 1 && (
+                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "16px", marginTop: "24px" }}>
+                    <button 
+                      disabled={matchPage === 0} 
+                      onClick={() => setMatchPage(p => p - 1)}
+                      className="primary-link ghost-link"
+                      style={{ minHeight: "36px", padding: "6px 14px", fontSize: "0.85rem" }}
+                    >
+                      ← Previous
+                    </button>
+                    <span style={{ fontSize: "0.9rem", color: "var(--muted)", fontWeight: 500 }}>
+                      Page {matchPage + 1} of {totalMatchPages}
+                    </span>
+                    <button 
+                      disabled={matchPage >= totalMatchPages - 1} 
+                      onClick={() => setMatchPage(p => p + 1)}
+                      className="primary-link ghost-link"
+                      style={{ minHeight: "36px", padding: "6px 14px", fontSize: "0.85rem" }}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -273,11 +328,38 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
                 </p>
               </div>
             ) : (
-              <div className="opportunity-grid">
-                {filteredOpps.map((opp) => (
-                  <OpportunityCard key={opp.id} opportunity={opp as any} />
-                ))}
-              </div>
+              <>
+                <div className="opportunity-grid">
+                  {paginatedOpps.map((opp) => (
+                    <OpportunityCard key={opp.id} opportunity={opp as any} />
+                  ))}
+                </div>
+
+                {/* Watchlist Openings Pagination Controls */}
+                {totalOppPages > 1 && (
+                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "16px", marginTop: "24px" }}>
+                    <button 
+                      disabled={oppPage === 0} 
+                      onClick={() => setOppPage(p => p - 1)}
+                      className="primary-link ghost-link"
+                      style={{ minHeight: "36px", padding: "6px 14px", fontSize: "0.85rem" }}
+                    >
+                      ← Previous
+                    </button>
+                    <span style={{ fontSize: "0.9rem", color: "var(--muted)", fontWeight: 500 }}>
+                      Page {oppPage + 1} of {totalOppPages}
+                    </span>
+                    <button 
+                      disabled={oppPage >= totalOppPages - 1} 
+                      onClick={() => setOppPage(p => p + 1)}
+                      className="primary-link ghost-link"
+                      style={{ minHeight: "36px", padding: "6px 14px", fontSize: "0.85rem" }}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

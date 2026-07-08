@@ -182,7 +182,7 @@ export default function DashboardClient({
       <section className="workspace-section">
         <div className="hero-board">
           <article className="hero-card">
-            <div className="section-label">Agent view</div>
+            <div className="section-label">AI Career Insight</div>
             <h2>A cleaner job search workspace built around your profile.</h2>
             <p className="hero-copy">{focusNote}</p>
             <div className="hero-stat-row">

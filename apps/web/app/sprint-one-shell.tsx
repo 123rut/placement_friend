@@ -245,7 +245,7 @@ export function SprintOneShell({
             </label>
 
             <label className="field">
-              <span>Batch year</span>
+              <span>Batch Completion Year</span>
               <select value={batchYear} onChange={(event) => setBatchYear(event.target.value)}>
                 {batchYearOptions.map((option) => (
                   <option key={option} value={option}>

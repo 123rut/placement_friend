@@ -501,9 +501,6 @@ export default function CompaniesPage() {
                     <tr key={company.id}>
                       <td style={{ fontWeight: 600 }}>
                         {company.name}
-                        <div style={{ fontSize: "0.78rem", fontWeight: "normal", color: "var(--muted)", marginTop: "4px" }}>
-                          Slug: <code>{company.id}</code>
-                        </div>
                       </td>
                       <td style={{ maxWidth: "320px" }}>
                         {isEditing ? (

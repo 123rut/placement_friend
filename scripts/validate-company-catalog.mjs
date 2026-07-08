@@ -158,7 +158,8 @@ const metadataOnly = args.includes("--metadata-only");
 const requestedIds = new Set(args.filter((arg) => arg !== "--metadata-only"));
 const companies = requestedIds.size
   ? seedCompanies.filter((company) => requestedIds.has(company.id))
-  : seedCompanies;
+  : seedCompanies.filter((company) => company.isActive !== false);
+
 
 if (requestedIds.size) {
   const foundIds = new Set(companies.map((company) => company.id));

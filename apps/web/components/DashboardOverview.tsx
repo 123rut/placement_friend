@@ -84,7 +84,7 @@ export default function DashboardOverview({
       {/* 2. Compact Hero Section */}
       <section style={{ display: "grid", gridTemplateColumns: "1fr", gap: "20px" }}>
         <article className="hero-card" style={{ padding: "16px 20px" }}>
-          <div className="section-label" style={{ marginBottom: "6px" }}>Agent view</div>
+          <div className="section-label" style={{ marginBottom: "6px" }}>AI Career Insight</div>
           <h2 style={{ fontSize: "1.25rem", margin: "0 0 6px" }}>Clean career baseline focused on your target scope.</h2>
           <p className="hero-copy" style={{ fontSize: "0.88rem", margin: "0 0 12px", lineHeight: "1.4" }}>{focusNote}</p>
           <div className="hero-stat-row" style={{ marginTop: "12px", gap: "24px" }}>
@@ -97,7 +97,7 @@ export default function DashboardOverview({
               <strong style={{ fontSize: "0.92rem" }}>{Number.parseFloat(student.cgpa).toFixed(2)}</strong>
             </div>
             <div className="hero-stat">
-              <span style={{ fontSize: "0.72rem" }}>Batch Year</span>
+              <span style={{ fontSize: "0.72rem" }}>Batch Completion Year</span>
               <strong style={{ fontSize: "0.92rem" }}>{student.batch_year}</strong>
             </div>
           </div>

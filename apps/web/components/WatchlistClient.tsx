@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
+
 import Link from "next/link";
 import { mutate } from "swr";
 import type { Company, CompanyCategory } from "@piaa/domain";
@@ -328,12 +329,17 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
     return () => clearInterval(interval);
   }, [userId]);
 
+  const syncAbortRef = useRef<AbortController | null>(null);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     setSyncError(null);
+    const controller = new AbortController();
+    syncAbortRef.current = controller;
     try {
       const syncRes = await fetch("/api/careerpilot/sync", {
-        method: "POST"
+        method: "POST",
+        signal: controller.signal,
       });
       const syncData = await syncRes.json().catch(() => ({}));
       if (!syncRes.ok) {
@@ -341,11 +347,33 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
       } else {
         setSyncError(null);
       }
-    } catch (err) {
-      setSyncError("Network error: Could not reach the sync endpoint.");
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        setSyncError("Network error: Could not reach the sync endpoint.");
+      }
+    } finally {
+      syncAbortRef.current = null;
+      setRefreshing(false);
     }
     await loadDashboardData(false);
   };
+
+  const handleStopSync = async () => {
+    // 1. Immediately abort the in-flight fetch so button toggles back
+    syncAbortRef.current?.abort();
+    syncAbortRef.current = null;
+    setRefreshing(false);
+    setSyncError("Stopping...");
+    // 2. Signal backend to stop its loop
+    try {
+      const res = await fetch("/api/careerpilot/sync/stop", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      setSyncError(data.message || "Sync stopped.");
+    } catch {
+      setSyncError("Stop signal sent (backend finishing last company).");
+    }
+  };
+
 
   const handlePreferencesRefresh = () => {
     loadDashboardData(true);
@@ -553,11 +581,11 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
           </Link>
           <button 
             type="button" 
-            onClick={handleRefresh} 
-            disabled={refreshing} 
+            onClick={refreshing ? handleStopSync : handleRefresh}
             className="primary-link ghost-link"
+            style={refreshing ? { color: "#f87171", borderColor: "#f87171" } : {}}
           >
-            Refresh
+            {refreshing ? "⏹ Stop Sync" : "Refresh"}
           </button>
           <button 
             type="button" 

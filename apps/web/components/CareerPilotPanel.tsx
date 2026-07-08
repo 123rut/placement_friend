@@ -84,6 +84,7 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
   ]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const syncAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -222,8 +223,13 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
     setError("");
     setSyncMessage("");
     setSyncing(true);
+    const controller = new AbortController();
+    syncAbortRef.current = controller;
     try {
-      const res = await fetch("/api/careerpilot/sync", { method: "POST" });
+      const res = await fetch("/api/careerpilot/sync", {
+        method: "POST",
+        signal: controller.signal,
+      });
       const data = (await res.json()) as SyncResultSummary & { error?: string };
       if (!res.ok) {
         setError(data.error || "Job sync failed.");
@@ -232,12 +238,32 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
         await loadTopMatches();
         await onSyncComplete?.();
       }
-    } catch {
-      setError("Job sync failed.");
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        setError("Job sync failed.");
+      }
     } finally {
+      syncAbortRef.current = null;
       setSyncing(false);
     }
   };
+
+  const handleStopSync = async () => {
+    // 1. Immediately abort the in-flight fetch so the button toggles back
+    syncAbortRef.current?.abort();
+    syncAbortRef.current = null;
+    setSyncing(false);
+    setSyncMessage("Stopping...");
+    // 2. Also signal the backend to exit its loop gracefully
+    try {
+      const res = await fetch("/api/careerpilot/sync/stop", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      setSyncMessage(data.message || "Sync stopped.");
+    } catch {
+      setSyncMessage("Stop signal sent (backend may still be finishing last company).");
+    }
+  };
+
 
   const handleSearchJobs = async () => {
     if (!jobQuery.trim()) {
@@ -308,19 +334,27 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
     if (!text) return null;
     const parts = [];
     let lastIndex = 0;
-    const regex = /\[([^\]]+)\]\(([^)]+)\)|`([^`]+)`|\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/gi;
+    // Match:
+    // 1. [Title](URL)
+    // 2. Hidden HTML comment: <!-- fit-id: UUID -->
+    // 3. Inline code block: `code`
+    // 4. Raw UUID as fallback
+    const regex = /\[([^\]]+)\]\(([^)]+)\)|<!--\s*fit-id:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s*-->|`([^`]+)`|\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/gi;
     let match;
 
+    let matchIndex = 0;
     while ((match = regex.exec(text)) !== null) {
-      const matchIndex = match.index;
-      if (matchIndex > lastIndex) {
-        parts.push(text.substring(lastIndex, matchIndex));
+      const idx = match.index;
+      if (idx > lastIndex) {
+        parts.push(text.substring(lastIndex, idx));
       }
+
+      const key = `${idx}-${matchIndex++}`;
 
       if (match[1] && match[2]) {
         parts.push(
           <a
-            key={matchIndex}
+            key={key}
             href={match[2]}
             target="_blank"
             rel="noopener noreferrer"
@@ -330,11 +364,34 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
           </a>
         );
       } else if (match[3]) {
+        // Match from hidden <!-- fit-id: UUID --> comment
         const code = match[3];
+        parts.push(
+          <button
+            key={key}
+            onClick={() => handleComputeMatch(code)}
+            className="primary-link"
+            style={{
+              minHeight: "22px",
+              padding: "1px 6px",
+              fontSize: "0.75em",
+              marginLeft: "6px",
+              background: "var(--good-soft, #10b981)",
+              borderColor: "var(--good-soft, #10b981)",
+              color: "#fff",
+              verticalAlign: "middle",
+            }}
+          >
+            Fit
+          </button>
+        );
+      } else if (match[4]) {
+        // Fallback inline code blocks
+        const code = match[4];
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
         if (isUuid) {
           parts.push(
-            <span key={matchIndex} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <span key={key} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
               <code className="job-id-inline" title="Technical Job ID">{code.slice(0, 8)}...</code>
               <button
                 onClick={() => handleComputeMatch(code)}
@@ -346,12 +403,13 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
             </span>
           );
         } else {
-          parts.push(<code key={matchIndex} className="job-id-inline">{code}</code>);
+          parts.push(<code key={key} className="job-id-inline">{code}</code>);
         }
-      } else if (match[4]) {
-        const code = match[4];
+      } else if (match[5]) {
+        // Fallback raw UUID match
+        const code = match[5];
         parts.push(
-          <span key={matchIndex} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+          <span key={key} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
             <code className="job-id-inline">{code.slice(0, 8)}...</code>
             <button
               onClick={() => handleComputeMatch(code)}
@@ -373,6 +431,7 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
 
     return parts.length > 0 ? parts : text;
   };
+
 
   const suggestionChips = [
     "Backend jobs in Bangalore",
@@ -593,9 +652,13 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
 
           <div style={{ borderTop: "1px solid var(--line)", paddingTop: "14px" }}>
             <h4 style={{ margin: "0 0 6px", fontSize: "0.9rem" }}>2. Find Matching Jobs</h4>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <button className="primary-link" onClick={handleSyncJobs} disabled={syncing} style={{ flexShrink: 0 }}>
-                {syncing ? "Syncing..." : "Sync Jobs Cache"}
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                className="primary-link"
+                onClick={syncing ? handleStopSync : handleSyncJobs}
+                style={{ flexShrink: 0, ...(syncing ? { background: "#f87171", borderColor: "#f87171" } : {}) }}
+              >
+                {syncing ? "⏹ Stop Sync" : "Sync Jobs Cache"}
               </button>
               {syncMessage && <span className="sync-note" style={{ fontSize: "0.78rem" }}>{syncMessage}</span>}
             </div>
