@@ -9,6 +9,7 @@
   "scripts": {
     "dev:web": "npm --workspace @piaa/web run dev",
     "build:web": "npm --workspace @piaa/web run build",
+    "lint": "npm run lint:web",
     "lint:web": "npm --workspace @piaa/web run lint",
     "typecheck:web": "npm --workspace @piaa/web run typecheck",
     "dev:api": "npm --workspace api run start:dev",

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "../../../../lib/supabase/server";
-import { getCareerPilotApiBaseUrl, getInternalHeaders } from "../_lib";
+import { getCareerPilotApiBaseUrl, getInternalHeaders, logRouteError, structuredError } from "../_lib";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,7 @@ export async function GET() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return structuredError("Unauthorized", 401);
   }
 
   try {
@@ -35,11 +35,9 @@ export async function GET() {
     });
     const data = await readUpstreamBody(response);
     return NextResponse.json(data, { status: response.status });
-  } catch {
-    return NextResponse.json(
-      { error: "CareerPilot API is not reachable. Start the Nest API on port 4000." },
-      { status: 503 },
-    );
+  } catch (error) {
+    logRouteError("careerpilot/jobs GET", error);
+    return structuredError("CareerPilot API is not reachable.", 503);
   }
 }
 
@@ -50,7 +48,7 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return structuredError("Unauthorized", 401);
   }
 
   const body = await request.json();
@@ -69,10 +67,8 @@ export async function POST(request: NextRequest) {
     });
     const data = await readUpstreamBody(response);
     return NextResponse.json(data, { status: response.status });
-  } catch {
-    return NextResponse.json(
-      { error: "CareerPilot API is not reachable. Start the Nest API on port 4000." },
-      { status: 503 },
-    );
+  } catch (error) {
+    logRouteError("careerpilot/jobs POST", error);
+    return structuredError("CareerPilot API is not reachable.", 503);
   }
 }

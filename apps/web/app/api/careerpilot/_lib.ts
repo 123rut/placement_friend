@@ -22,3 +22,12 @@ export function getInternalHeaders(
     ...extra,
   };
 }
+
+export function structuredError(error: string, status = 500) {
+  return Response.json({ success: false, error }, { status });
+}
+
+export function logRouteError(route: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[${route}] ${message}`);
+}

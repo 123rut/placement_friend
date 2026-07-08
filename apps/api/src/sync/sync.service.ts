@@ -17,6 +17,14 @@ interface NormalizedJob {
   postedAt: Date | null;
 }
 
+interface SyncSummary {
+  processed: number;
+  succeeded: number;
+  failed: number;
+  jobsFound: number;
+  jobsNew: number;
+}
+
 @Injectable()
 export class SyncService {
   private cancelRequested = false;
@@ -50,6 +58,8 @@ export class SyncService {
 
   async syncCompany(company: any, studentProfile?: any, studentRecord?: any, userId?: string): Promise<SyncResult> {
     const start = Date.now();
+    const ats = company.ats || "unknown";
+    console.log(`[Sync] ${company.name} (${ats}) started.`);
     try {
       const jobs = await this.fetchJobsForATS(company);
       const { total, newCount } = await this.upsertJobs(jobs, company.id, studentProfile, studentRecord, userId);
@@ -60,17 +70,19 @@ export class SyncService {
         [company.id]
       );
       await this.logSync(company.id, "success", total, newCount, durationMs);
-      console.log(`[Sync] Finished company ${company.name}: Found ${total} jobs, ${newCount} new saved.`);
+      console.log(`[Sync] ${company.name} (${ats}) completed: ${total} jobs, ${newCount} new, ${durationMs}ms.`);
 
       return { companyId: company.id, companyName: company.name, status: "success", jobsFound: total, jobsNew: newCount, durationMs };
     } catch (err: any) {
       const durationMs = Date.now() - start;
+      const reason = err?.message || "Unknown sync error";
       await this.pool.query(
         `UPDATE companies SET sync_status = 'failed', last_error = $1 WHERE id = $2`,
-        [err.message, company.id]
+        [reason, company.id]
       );
-      await this.logSync(company.id, "failed", 0, 0, durationMs, err.message);
-      return { companyId: company.id, companyName: company.name, status: "failed", jobsFound: 0, jobsNew: 0, durationMs, error: err.message };
+      await this.logSync(company.id, "failed", 0, 0, durationMs, reason);
+      console.warn(`[Sync] ${company.name} (${ats}) failed after ${durationMs}ms: ${reason}`);
+      return { companyId: company.id, companyName: company.name, status: "failed", jobsFound: 0, jobsNew: 0, durationMs, error: reason };
     }
   }
 
@@ -145,6 +157,9 @@ export class SyncService {
       ]);
 
       results.push(result);
+      if (result.status === "failed") {
+        console.warn(`[Sync] Continuing after ${result.companyName} failure: ${result.error || "Unknown error"}`);
+      }
       await new Promise((r) => setTimeout(r, 300));
 
       if (this.cancelRequested) {
@@ -152,6 +167,10 @@ export class SyncService {
         break;
       }
     }
+    const summary = this.summarizeSyncResults(results);
+    console.log(
+      `[Sync Complete] Companies Processed: ${summary.processed}; Succeeded: ${summary.succeeded}; Failed: ${summary.failed}; Jobs Found: ${summary.jobsFound}; New Jobs: ${summary.jobsNew}`,
+    );
     this.isSyncing = false;
     this.cancelRequested = false;
     return results;
@@ -168,7 +187,7 @@ export class SyncService {
       case "ashby":
         return this.fetchAshby(company.identifier);
       case "workday":
-        return this.fetchWorkday(company.identifier, company.site, company.ats_host);
+        return this.fetchWorkday(company.identifier, company.site, company.host || company.ats_host);
       case "smartrecruiters":
         return this.fetchSmartRecruiters(company.identifier);
       default:
@@ -388,6 +407,23 @@ export class SyncService {
     await this.pool.query(
       `INSERT INTO sync_logs (company_id, status, jobs_found, jobs_new, duration_ms, error) VALUES ($1,$2,$3,$4,$5,$6)`,
       [companyId, status, jobsFound, jobsNew, durationMs, error || null]
+    );
+  }
+
+  private summarizeSyncResults(results: SyncResult[]): SyncSummary {
+    return results.reduce<SyncSummary>(
+      (summary, result) => {
+        summary.processed++;
+        if (result.status === "success") {
+          summary.succeeded++;
+        } else {
+          summary.failed++;
+        }
+        summary.jobsFound += result.jobsFound || 0;
+        summary.jobsNew += result.jobsNew || 0;
+        return summary;
+      },
+      { processed: 0, succeeded: 0, failed: 0, jobsFound: 0, jobsNew: 0 },
     );
   }
 

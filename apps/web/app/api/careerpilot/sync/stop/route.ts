@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCareerPilotApiBaseUrl, getInternalHeaders } from "../../_lib";
+import { getCareerPilotApiBaseUrl, getInternalHeaders, logRouteError, structuredError } from "../../_lib";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +12,8 @@ export async function POST() {
     });
     const data = await response.json().catch(() => ({ message: "Stop signal sent." }));
     return NextResponse.json(data, { status: response.status });
-  } catch {
-    return NextResponse.json(
-      { message: "CareerPilot API is not reachable." },
-      { status: 503 },
-    );
+  } catch (error) {
+    logRouteError("careerpilot/sync/stop", error);
+    return structuredError("CareerPilot API is not reachable.", 503);
   }
 }

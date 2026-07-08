@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 
 import Link from "next/link";
 import { mutate } from "swr";
@@ -91,9 +91,9 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
   const [rawTargets, setRawTargets] = useState<any[]>([]);
   const [syncError, setSyncError] = useState<string | null>(null);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
-  const loadDashboardData = async (silent = false) => {
+  const loadDashboardData = useCallback(async (silent = false) => {
     if (!silent) {
       setLoading(true);
       setError(null);
@@ -316,7 +316,7 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [supabase, userId]);
 
   useEffect(() => {
     loadDashboardData();
@@ -327,7 +327,7 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
     }, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [userId]);
+  }, [loadDashboardData]);
 
   const syncAbortRef = useRef<AbortController | null>(null);
 

@@ -58,8 +58,14 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
     { revalidateOnFocus: false }
   );
 
-  const matchedJobs: MatchedJobCard[] = Array.isArray(matchedJobsData) ? matchedJobsData : [];
-  const scrapedOpps: ScrapedOpp[] = oppsData?.data && Array.isArray(oppsData.data) ? oppsData.data : [];
+  const matchedJobs: MatchedJobCard[] = useMemo(
+    () => (Array.isArray(matchedJobsData) ? matchedJobsData : []),
+    [matchedJobsData],
+  );
+  const scrapedOpps: ScrapedOpp[] = useMemo(
+    () => (oppsData?.data && Array.isArray(oppsData.data) ? oppsData.data : []),
+    [oppsData],
+  );
   
   const loading = !matchedJobsData && !oppsData && !matchedError && !oppsError;
 

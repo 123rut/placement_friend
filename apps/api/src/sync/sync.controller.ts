@@ -11,11 +11,11 @@ export class SyncController {
   @Post()
   async syncAll(
     @Body("userId") userId?: string,
-  ): Promise<{ success: number; failed: number; results: SyncResult[] }> {
+  ): Promise<{ success: boolean; succeeded: number; failed: number; processed: number; results: SyncResult[] }> {
     const results = await this.syncService.syncAll(userId);
-    const success = results.filter(r => r.status === "success").length;
+    const succeeded = results.filter(r => r.status === "success").length;
     const failed = results.filter(r => r.status === "failed").length;
-    return { success, failed, results };
+    return { success: failed === 0, succeeded, failed, processed: results.length, results };
   }
 
   /** POST /api/worker/sync/stop — MUST be before :companyId to avoid route conflict */

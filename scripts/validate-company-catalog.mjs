@@ -31,6 +31,7 @@ function validateMetadata(company) {
     company,
     ok: missing.length === 0,
     status: missing.length === 0 ? "metadata ok" : `missing ${missing.join(", ")}`,
+    reason: missing.length === 0 ? "passed" : "invalid metadata",
     durationMs: 0,
     error: missing.length === 0 ? null : `Missing fields: ${missing.join(", ")}`,
   };
@@ -54,9 +55,45 @@ function validateCatalogShape(companies) {
     },
     ok: false,
     status: "duplicate id",
+    reason: "duplicate id",
     durationMs: 0,
     error: `Duplicate company id: ${id}`,
   }));
+}
+
+function classifyHttpFailure(status) {
+  if (status === 401 || status === 403) return "requires authentication";
+  if (status === 404) return "invalid identifier";
+  if (status >= 300 && status < 400) return "redirect";
+  if (status === 408 || status === 429 || status === 504) return "timeout";
+  if (status >= 500) return "ats server error";
+  return `http ${status}`;
+}
+
+function classifyError(error) {
+  const cause = error?.cause;
+  const code = cause?.code || error?.code;
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+
+  if (error?.name === "TimeoutError" || error?.name === "AbortError" || lower.includes("timeout")) {
+    return "timeout";
+  }
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN") return "dns failure";
+  if (code === "ECONNREFUSED") return "connection refused";
+  if (code === "ECONNRESET" || code === "UND_ERR_SOCKET") return "connection reset";
+  if (code === "CERT_HAS_EXPIRED" || code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE") return "tls failure";
+  if (lower.includes("fetch failed")) return "network fetch failure";
+  if (lower.includes("unsupported ats")) return "unsupported ats";
+  if (lower.includes("requires host") || lower.includes("requires host and site")) return "invalid metadata";
+  return "unknown error";
+}
+
+function formatFailure(error) {
+  const cause = error?.cause;
+  const code = cause?.code || error?.code;
+  const message = error instanceof Error ? error.message : String(error);
+  return code ? `${message} (${code})` : message;
 }
 
 function requestFor(company) {
@@ -122,6 +159,7 @@ async function validate(company) {
       company,
       ok: response.ok,
       status: response.status,
+      reason: response.ok ? "passed" : classifyHttpFailure(response.status),
       durationMs: Date.now() - startedAt,
       error: response.ok ? null : response.statusText,
     };
@@ -130,8 +168,9 @@ async function validate(company) {
       company,
       ok: false,
       status: 0,
+      reason: classifyError(error),
       durationMs: Date.now() - startedAt,
-      error: error instanceof Error ? error.message : String(error),
+      error: formatFailure(error),
     };
   }
 }
@@ -181,13 +220,50 @@ const failed = allResults.filter((result) => !result.ok);
 
 for (const result of allResults) {
   const marker = result.ok ? "PASS" : "FAIL";
-  const status = result.status || result.error;
+  const status = result.ok ? result.status : result.reason || result.status || result.error;
   console.log(
     `${marker.padEnd(4)} ${result.company.id.padEnd(28)} ${result.company.ats.padEnd(15)} ${String(status).padEnd(20)} ${result.durationMs}ms`,
   );
+  if (!result.ok && result.error) {
+    console.log(`     ${result.error}`);
+  }
 }
 
 const passed = allResults.length - failed.length;
+
+function printSummary(results) {
+  const providers = new Map();
+  for (const result of results) {
+    const provider = result.company.ats || "unknown";
+    if (!providers.has(provider)) {
+      providers.set(provider, { passed: 0, failures: new Map() });
+    }
+    const bucket = providers.get(provider);
+    if (result.ok) {
+      bucket.passed++;
+    } else {
+      const reason = result.reason || "unknown error";
+      bucket.failures.set(reason, (bucket.failures.get(reason) || 0) + 1);
+    }
+  }
+
+  console.log("\nValidation Summary\n");
+  for (const [provider, bucket] of [...providers.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    console.log(provider);
+    console.log(`PASS ${bucket.passed} passed`);
+    for (const [reason, count] of [...bucket.failures.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      console.log(`FAIL ${count} ${reason}`);
+    }
+    console.log("");
+  }
+
+  console.log("Total");
+  console.log(`PASS Passed: ${passed}`);
+  console.log(`FAIL Failed: ${failed.length}`);
+}
+
+printSummary(allResults);
+
 console.log(`\n${passed}/${allResults.length} ATS configurations passed.`);
 if (failed.length) {
   process.exitCode = 1;

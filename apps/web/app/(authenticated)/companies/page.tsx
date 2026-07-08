@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 
 interface Company {
@@ -53,7 +53,7 @@ export default function CompaniesPage() {
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch Companies
-  const fetchCompanies = async (currentPage = page, currentSearch = search, currentStatus = statusFilter) => {
+  const fetchCompanies = useCallback(async (currentPage = page, currentSearch = search, currentStatus = statusFilter) => {
     try {
       const query = new URLSearchParams({
         page: currentPage.toString(),
@@ -72,7 +72,7 @@ export default function CompaniesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, search, statusFilter]);
 
   // Setup Polling Scheduler
   useEffect(() => {
@@ -115,7 +115,7 @@ export default function CompaniesPage() {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [page, search, statusFilter]);
+  }, [fetchCompanies, page, search, statusFilter]);
 
   // Trigger Fast Polling (5s intervals for 60s) after updates
   const startFastPolling = () => {

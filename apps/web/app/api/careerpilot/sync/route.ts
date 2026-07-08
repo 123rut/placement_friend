@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "../../../../lib/supabase/server";
-import { getCareerPilotApiBaseUrl, getInternalHeaders } from "../_lib";
+import { getCareerPilotApiBaseUrl, getInternalHeaders, logRouteError, structuredError } from "../_lib";
 
 async function readUpstreamBody(response: Response) {
   const text = await response.text();
@@ -25,7 +25,7 @@ export async function POST() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return structuredError("Unauthorized", 401);
   }
 
   try {
@@ -39,14 +39,13 @@ export async function POST() {
     const data = await readUpstreamBody(response);
     return NextResponse.json(data, { status: response.status });
   } catch (err: any) {
+    logRouteError("careerpilot/sync", err);
     const isTimeout = err?.name === "TimeoutError" || err?.code === "UND_ERR_CONNECT_TIMEOUT";
-    return NextResponse.json(
-      {
-        error: isTimeout
-          ? "Sync timed out after 10 minutes. Try syncing fewer companies or check ATS connectivity."
-          : "CareerPilot API is not reachable. Start the Nest API on port 4000.",
-      },
-      { status: isTimeout ? 504 : 503 },
+    return structuredError(
+      isTimeout
+        ? "Sync timed out after 10 minutes. Try syncing fewer companies or check ATS connectivity."
+        : "CareerPilot API is not reachable.",
+      isTimeout ? 504 : 503,
     );
   }
 }

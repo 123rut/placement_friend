@@ -45,7 +45,10 @@ export default function DashboardOverview({
     revalidateOnFocus: false,
   });
   
-  const matchedJobs = Array.isArray(matchedJobsData) ? matchedJobsData : [];
+  const matchedJobs = useMemo(
+    () => (Array.isArray(matchedJobsData) ? matchedJobsData : []),
+    [matchedJobsData],
+  );
   const firstName = student.full_name.split(" ")[0];
   const [oppsHovered, setOppsHovered] = useState(false);
  
