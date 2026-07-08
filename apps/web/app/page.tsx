@@ -2,26 +2,49 @@ import { redirect } from "next/navigation";
 import { createClient } from "../lib/supabase/server";
 
 export default async function HomePage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  try {
+    console.log("Step 1: Creating Supabase client");
+    const supabase = await createClient();
 
-  // 1. Redirect immediately if not authenticated
-  if (!user) {
-    redirect("/login");
-  }
+    console.log("Step 2: Getting user");
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-  // 2. Query students table for profile existence
-  const { data: studentProfile } = await supabase
-    .from("students")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
+    if (userError) {
+      console.error("getUser error:", userError);
+      throw userError;
+    }
 
-  // 3. Redirect to dashboard if profile exists, otherwise to profile setup
-  if (studentProfile) {
-    redirect("/dashboard");
-  } else {
+    console.log("User:", user?.id);
+
+    if (!user) {
+      redirect("/login");
+    }
+
+    console.log("Step 3: Querying students table");
+
+    const { data: studentProfile, error: profileError } = await supabase
+      .from("students")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error("Student query error:", profileError);
+      throw profileError;
+    }
+
+    console.log("Profile exists:", !!studentProfile);
+
+    if (studentProfile) {
+      redirect("/dashboard");
+    }
+
     redirect("/profile");
+  } catch (err) {
+    console.error("HOME PAGE ERROR:", err);
+    throw err;
   }
 }
-
