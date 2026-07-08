@@ -6,6 +6,7 @@ import { SyncModule } from "./sync/sync.module";
 import { ResumeModule } from "./resume/resume.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { AgentModule } from "./agent/agent.module";
+import { CompaniesModule } from './companies/companies.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { AgentModule } from "./agent/agent.module";
     ResumeModule,
     JobsModule,
     AgentModule,
+    CompaniesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

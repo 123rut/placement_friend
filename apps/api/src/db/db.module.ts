@@ -3,7 +3,7 @@ import { Pool } from "pg";
 import * as dotenv from "dotenv";
 import * as path from "path";
 
-dotenv.config({ path: path.join(__dirname, "../../../../.env.local") });
+dotenv.config();
 
 export const DB_POOL = "DB_POOL";
 
@@ -26,4 +26,4 @@ export const DB_POOL = "DB_POOL";
   ],
   exports: [DB_POOL],
 })
-export class DbModule {}
+export class DbModule { }
