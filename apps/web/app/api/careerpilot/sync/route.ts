@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "../../../../lib/supabase/server";
-import { getCareerPilotApiBaseUrl } from "../_lib";
+import { getCareerPilotApiBaseUrl, getInternalHeaders } from "../_lib";
 
 async function readUpstreamBody(response: Response) {
   const text = await response.text();
@@ -32,7 +32,7 @@ export async function POST() {
     // 10-minute timeout — sync iterates over many companies and generates embeddings
     const response = await fetch(`${getCareerPilotApiBaseUrl()}/worker/sync`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getInternalHeaders(),
       body: JSON.stringify({ userId: user.id }),
       signal: AbortSignal.timeout(10 * 60 * 1000),
     });

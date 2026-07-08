@@ -171,7 +171,7 @@ export default function DashboardClient({
             ATS Registry
           </Link>
           <Link className="primary-link" href="/profile">
-            Tune Profile
+            Profile
           </Link>
           <button className="action-btn-danger" onClick={handleLogout}>
             Logout

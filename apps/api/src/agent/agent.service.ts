@@ -110,7 +110,7 @@ Workflow rules:
 Rules:
 - If "url" is missing or empty for a job, render the title as plain text (no brackets/link).
 - Never print or display any UUIDs, requisition codes, or job numbers (such as Job ID, System ID, or Job Code) in plain visible text.
-- Always include the comment `<!-- fit-id: <id> -->` exactly as shown at the end of each recommended job line if the id exists.
+- Always include the comment \`<!-- fit-id: <id> -->\` exactly as shown at the end of each recommended job line if the id exists.
 - Never invent, guess, or fabricate a URL. Only use values provided in the retrieved job data.`;
 
 @Injectable()

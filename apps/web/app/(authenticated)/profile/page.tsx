@@ -19,10 +19,16 @@ export default async function ProfilePage() {
     .eq("id", user.id)
     .maybeSingle();
 
-  // If student profile does not exist yet, they need to onboard first
-  if (!student) {
-    redirect("/");
-  }
+  // If student profile does not exist yet, prepare fallback default profile
+  const defaultStudent = student || {
+    id: user.id,
+    full_name: user.email?.split("@")[0] || "New Student",
+    college_email: user.email || "",
+    branch: "Computer Science",
+    cgpa: "8.0",
+    batch_year: new Date().getFullYear() + 2,
+  };
+
 
   // 3. Query all companies from companies table to keep in sync with database records
   const { data: dbCompanies } = await supabase
@@ -65,7 +71,7 @@ export default async function ProfilePage() {
   return (
     <ProfileEditShell
       user={user}
-      profile={student}
+      profile={defaultStudent}
       companies={mappedCompanies as any}
       initialSelectedCompanyIds={initialSelectedCompanyIds}
     />

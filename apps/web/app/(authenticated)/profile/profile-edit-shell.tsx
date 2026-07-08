@@ -6,6 +6,7 @@ import { branchOptions, categoryLabels } from "../../../lib/sprint-one";
 import type { Company, CompanyCategory } from "@piaa/domain";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "../../../lib/supabase/client";
+import { getCollegeByEmailDb } from "../../../lib/supabase/colleges";
 
 type ProfileEditShellProps = {
   user: User;
@@ -227,16 +228,22 @@ export function ProfileEditShell({
       return;
     }
 
+    // Resolve college from email domain (optional — non-college users get college_id: null)
+    const college = await getCollegeByEmailDb(supabase, user.email || "").catch(() => null);
+
     const { error: profileError } = await supabase
       .from("students")
-      .update({
+      .upsert({
+        id: user.id,
         full_name: fullName,
+        college_email: user.email || "",
+        college_id: college?.id ?? null,
         branch,
         cgpa: parsedCgpa,
         batch_year: parseInt(batchYear),
+        is_verified: true,
         updated_at: new Date().toISOString()
-      })
-      .eq("id", user.id);
+      });
 
     if (profileError) {
       setErrorMessage(`Failed to update profile: ${profileError.message}`);
@@ -320,7 +327,7 @@ export function ProfileEditShell({
 
     setMessage("Changes saved successfully! Redirecting...");
     setTimeout(() => {
-      window.location.href = "/watchlist";
+      window.location.href = "/dashboard";
     }, 1000);
   };
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "../../../../lib/supabase/server";
-import { getCareerPilotApiBaseUrl } from "../_lib";
+import { getCareerPilotApiBaseUrl, getInternalHeaders } from "../_lib";
 
 async function readUpstreamBody(response: Response) {
   const text = await response.text();
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   try {
     const response = await fetch(`${getCareerPilotApiBaseUrl()}/agent/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getInternalHeaders(),
       body: JSON.stringify({
         userId: user.id,
         message: body.message,

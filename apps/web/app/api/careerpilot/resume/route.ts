@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "../../../../lib/supabase/server";
-import { getCareerPilotApiBaseUrl } from "../_lib";
+import { getCareerPilotApiBaseUrl, getInternalHeaders } from "../_lib";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +30,7 @@ export async function GET() {
   try {
     const response = await fetch(`${getCareerPilotApiBaseUrl()}/resume/${user.id}`, {
       method: "GET",
+      headers: getInternalHeaders(),
       cache: "no-store",
     });
     const data = await readUpstreamBody(response);
@@ -70,6 +71,7 @@ export async function POST(request: Request) {
   try {
     const response = await fetch(`${getCareerPilotApiBaseUrl()}/resume/parse`, {
       method: "POST",
+      headers: getInternalHeaders({}, { includeContentType: false }),
       body: outgoingForm,
     });
     const data = await readUpstreamBody(response);
@@ -96,7 +98,7 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const response = await fetch(`${getCareerPilotApiBaseUrl()}/resume/${user.id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getInternalHeaders(),
       body: JSON.stringify(body),
     });
     const data = await readUpstreamBody(response);

@@ -506,7 +506,7 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
         </div>
 
         <div className="panel" style={{ textAlign: "center", padding: "40px", border: "1px solid var(--accent-soft)", background: "var(--surface-muted)" }}>
-          <h2 style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--text)" }}>We couldn't load your tracked companies.</h2>
+          <h2 style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--text)" }}>We couldn&apos;t load your tracked companies.</h2>
           <p style={{ color: "var(--muted)", margin: "12px 0 24px", fontSize: "0.95rem" }}>
             There was an error communicating with the database. Please try again or browse your opportunities.
           </p>

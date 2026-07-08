@@ -29,7 +29,7 @@ CREATE TABLE students (
   id TEXT PRIMARY KEY,
   full_name TEXT NOT NULL,
   college_email TEXT NOT NULL UNIQUE,
-  college_id TEXT NOT NULL REFERENCES colleges(id),
+  college_id TEXT REFERENCES colleges(id),
   branch TEXT NOT NULL,
   cgpa NUMERIC(3,2) NOT NULL,
   batch_year INTEGER NOT NULL,
