@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "../lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   try {
     console.log("Step 1: Creating Supabase client");
