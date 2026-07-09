@@ -23,6 +23,7 @@
     "@types/node": "24.0.1",
     "@types/react": "19.1.6",
     "@types/react-dom": "19.1.5",
+    "@types/string-similarity": "^4.0.2",
     "eslint": "^9.39.4",
     "eslint-config-next": "^15.3.3",
     "typescript": "5.8.3"
