@@ -1,4 +1,4 @@
-import type { Company } from "./types.js";
+import type { Company } from "./types";
 
 export const seedCompanies: Company[] = [
   {

@@ -1,7 +1,6 @@
 import { Injectable, Inject, HttpException, HttpStatus } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../db/db.module";
-import { matchStudentToOpportunity, StudentProfile, Opportunity } from "@piaa/domain";
 
 @Injectable()
 export class PortalService {
@@ -13,7 +12,7 @@ export class PortalService {
     const studentRes = await this.pool.query(
       `SELECT s.*, c.name as college_name 
        FROM students s
-       JOIN colleges c ON s.college_id = c.id
+       LEFT JOIN colleges c ON s.college_id = c.id
        WHERE s.id = $1`,
       [studentId]
     );
@@ -52,55 +51,23 @@ export class PortalService {
       [trackedCompanyIds]
     );
 
-    const studentProfile: StudentProfile = {
-      id: student.id,
-      fullName: student.full_name,
-      email: student.college_email,
-      collegeId: student.college_id,
-      collegeName: student.college_name,
-      branch: student.branch,
-      cgpa: parseFloat(student.cgpa),
-      batchYear: student.batch_year,
-      isVerified: student.is_verified,
-      trackedCompanyIds: trackedCompanyIds
-    };
-
     const matchedOpportunities: any[] = [];
 
     for (const job of jobsRes.rows) {
       const rawBranches = job.eligible_branches ? String(job.eligible_branches) : "";
       const allowedBranches = rawBranches.replace(/[{}"']/g, "").split(",").map(b => b.trim()).filter(Boolean);
 
-      const opportunity: Opportunity = {
+      matchedOpportunities.push({
         id: job.id,
-        companyId: job.company_id,
-        title: job.role,
-        roleType: job.role_type === "internship" ? "internship" : "full-time",
-        location: job.location || "Bengaluru",
-        description: "",
-        applicationUrl: job.apply_url,
-        sourceUrl: job.apply_url,
+        company_name: job.company_name,
+        role: job.role,
+        role_type: job.role_type,
+        min_cgpa: job.min_cgpa ? parseFloat(job.min_cgpa) : null,
+        allowed_branches: allowedBranches,
         deadline: null,
-        minCgpa: job.min_cgpa ? parseFloat(job.min_cgpa) : null,
-        allowedBranches: allowedBranches,
-        allowedBatchYears: [],
-        postedAt: job.posted_at ? new Date(job.posted_at).toISOString() : new Date().toISOString()
-      };
-
-      const match = matchStudentToOpportunity(studentProfile, opportunity);
-      if (match.qualifies) {
-        matchedOpportunities.push({
-          id: job.id,
-          company_name: job.company_name,
-          role: job.role,
-          role_type: job.role_type,
-          min_cgpa: job.min_cgpa ? parseFloat(job.min_cgpa) : null,
-          allowed_branches: opportunity.allowedBranches,
-          deadline: null,
-          apply_url: job.apply_url,
-          posted_at: job.posted_at
-        });
-      }
+        apply_url: job.apply_url,
+        posted_at: job.posted_at
+      });
     }
 
     return { data: matchedOpportunities };

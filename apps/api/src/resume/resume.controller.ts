@@ -47,6 +47,7 @@ export class ResumeController {
         profile,
       };
     } catch (error) {
+      console.error("[Resume Parse Error Stack]:", error);
       throw new InternalServerErrorException(this.toResumeErrorMessage(error));
     }
   }

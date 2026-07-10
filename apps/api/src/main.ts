@@ -1,3 +1,9 @@
+import * as dotenv from "dotenv";
+import * as path from "path";
+dotenv.config({ path: path.join(process.cwd(), ".env.local") });
+dotenv.config({ path: path.join(__dirname, "../../../.env.local") });
+dotenv.config();
+
 import { NestFactory } from "@nestjs/core";
 import type { NextFunction, Request, Response } from "express";
 import { AppModule } from "./app.module";

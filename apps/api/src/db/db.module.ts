@@ -3,6 +3,8 @@ import { Pool } from "pg";
 import * as dotenv from "dotenv";
 import * as path from "path";
 
+dotenv.config({ path: path.join(process.cwd(), ".env.local") });
+dotenv.config({ path: path.join(__dirname, "../../../.env.local") });
 dotenv.config();
 
 export const DB_POOL = "DB_POOL";

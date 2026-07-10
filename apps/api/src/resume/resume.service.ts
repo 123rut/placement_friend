@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import * as mammoth from "mammoth";
-import { PDFParse } from "pdf-parse";
+import pdf = require("pdf-parse");
 import { Pool } from "pg";
 import { CandidateProfileRecord, CareerStage, ParsedProfile } from "../careerpilot.types";
 import { DB_POOL } from "../db/db.module";
@@ -167,13 +167,8 @@ export class ResumeService {
 
   async extractText(buffer: Buffer, mimetype: string): Promise<string> {
     if (mimetype === "application/pdf") {
-      const parser = new PDFParse({ data: buffer });
-      try {
-        const parsed = await parser.getText();
-        return parsed.text;
-      } finally {
-        await parser.destroy();
-      }
+      const parsed = await pdf(buffer);
+      return parsed.text;
     }
 
     if (mimetype.includes("word") || mimetype.includes("openxmlformats")) {
