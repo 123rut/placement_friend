@@ -28,6 +28,15 @@ export function structuredError(error: string, status = 500) {
 }
 
 export function logRouteError(route: string, error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`[${route}] ${message}`);
+  console.error(`[${route}]`, error);
+
+  if (error instanceof Error) {
+    console.error("Message:", error.message);
+    console.error("Stack:", error.stack);
+
+    const cause = (error as Error & { cause?: unknown }).cause;
+    if (cause) {
+      console.error("Cause:", cause);
+    }
+  }
 }

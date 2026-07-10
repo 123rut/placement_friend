@@ -40,7 +40,7 @@ async function bootstrap() {
   httpServer.requestTimeout = FIFTEEN_MINUTES;   // entire request receive timeout
   httpServer.headersTimeout = FIFTEEN_MINUTES + 1000; // header timeout (must be > keepAliveTimeout)
 
-  await app.listen(process.env.PORT ?? 4000);
+  await app.listen(process.env.PORT ?? 4000, "0.0.0.0");
   console.log(`🚀 CareerPilot API running on http://localhost:4000/api`);
 }
 bootstrap();
