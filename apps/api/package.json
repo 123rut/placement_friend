@@ -72,15 +72,15 @@
       "^.+\\.(t|j)s$": [
         "ts-jest",
         {
-        "tsconfig": {
-          "module": "commonjs",
-          "moduleResolution": "node",
-          "resolvePackageJsonExports": false,
-          "target": "es2022",
-          "experimentalDecorators": true,
-          "emitDecoratorMetadata": true
+          "tsconfig": {
+            "module": "commonjs",
+            "moduleResolution": "node",
+            "resolvePackageJsonExports": false,
+            "target": "es2022",
+            "experimentalDecorators": true,
+            "emitDecoratorMetadata": true
+          }
         }
-      }
       ]
     },
     "collectCoverageFrom": [
