@@ -62,13 +62,13 @@ function cleanHtmlForAI(html: string): string {
   // 5. Collapse whitespace
   html = html.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
 
-  // 6. Hard cap — LLMs rarely need more than ~12k chars to find job listings
+  // 6. Hard cap. LLMs rarely need more than ~12k chars to find job listings.
   return html.slice(0, 12000);
 }
 
 /**
  * Parses the retry-after duration from a Groq 429 error message.
- * e.g. "Please try again in 13.26s" → 16 (ceil + 2s buffer)
+ * e.g. "Please try again in 13.26s" -> 16 (ceil + 2s buffer)
  */
 function parseRetryAfter(errorText: string): number {
   const match = errorText.match(/try again in ([\d.]+)s/);
@@ -91,11 +91,11 @@ export async function extractOpportunities(
   studentBranch?: string | null,
   careersUrl?: string | null
 ): Promise<ScrapedOpportunity[]> {
-  // Clean HTML before sending to any LLM — strips scripts, styles, nav, etc.
+  // Clean HTML before sending to any LLM; strips scripts, styles, nav, etc.
   const rawLen = text.length;
   text = cleanHtmlForAI(text);
-  console.log(`[${companyId}] HTML cleanup: ${rawLen} → ${text.length} chars`);
-  // Collect all available Groq keys — rotate through them on 429 to triple effective TPM
+  console.log(`[${companyId}] HTML cleanup: ${rawLen} -> ${text.length} chars`);
+  // Collect all available Groq keys and rotate through them on 429.
   const groqKeys = [
     process.env.GROQ_API_KEY,
     process.env.GROQ_API_KEY_2,
@@ -109,7 +109,7 @@ export async function extractOpportunities(
   // Saves ~2,000 tokens per empty landing page (Accenture, Bosch, Deloitte, etc.)
   const JOB_SIGNAL = /intern|engineer|developer|analyst|scientist|architect|consultant|associate|graduate|placement/i;
   if (!JOB_SIGNAL.test(text)) {
-    console.log(`[${companyId}] No job signals in page — skipping LLM call`);
+    console.log(`[${companyId}] No job signals in page; skipping LLM call`);
     return [];
   }
 
@@ -125,16 +125,44 @@ Rules: only specific roles (e.g. "SWE Intern"), not categories. applyUrl must be
     const prompt = `Company: ${companyId}\n\n${compactText}`;
 
     const groqBody = JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       messages: [
         { role: "system", content: systemInstruction },
         { role: "user", content: prompt }
       ],
-      response_format: { type: "json_object" },
-      temperature: 0.1
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "scraped_opportunities",
+          schema: {
+            type: "object",
+            properties: {
+              opportunities: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    role: { type: "string" },
+                    eligibility: { type: "string" },
+                    deadline: { type: ["string", "null"] },
+                    applyUrl: { type: "string" }
+                  },
+                  required: ["role", "eligibility", "deadline", "applyUrl"],
+                  additionalProperties: false
+                }
+              }
+            },
+            required: ["opportunities"],
+            additionalProperties: false
+          },
+          strict: true
+        }
+      },
+      temperature: 0.1,
+      max_tokens: 4096
     });
 
-    // Try each key in sequence — on 429 rotate to the next key immediately
+    // Try each key in sequence. On 429, rotate to the next key immediately.
     for (let i = 0; i < groqKeys.length; i++) {
       const key = groqKeys[i];
       try {
@@ -150,11 +178,11 @@ Rules: only specific roles (e.g. "SWE Intern"), not categories. applyUrl must be
         if (response.status === 429) {
           const errText = await response.text();
           if (i < groqKeys.length - 1) {
-            // More keys available — rotate immediately, no wait needed
-            console.log(`[Groq key ${i + 1}] Rate limited — rotating to key ${i + 2}`);
+            // More keys available, so rotate immediately with no wait.
+            console.log(`[Groq key ${i + 1}] Rate limited; rotating to key ${i + 2}`);
             continue;
           }
-          // Last key also hit 429 — parse wait and retry this key once before falling to Gemini
+          // Last key also hit 429. Wait once before falling through to Gemini.
           const waitSecs = parseRetryAfter(errText);
           console.log(`[Groq] All keys rate limited. Waiting ${waitSecs}s then retrying key 1...`);
           await new Promise(r => setTimeout(r, waitSecs * 1000));
@@ -179,10 +207,10 @@ Rules: only specific roles (e.g. "SWE Intern"), not categories. applyUrl must be
           const content = json.choices?.[0]?.message?.content || "";
           const parsed = JSON.parse(content);
           if (parsed && Array.isArray(parsed.opportunities)) return parsed.opportunities;
-          break; // Parsed but no opportunities array — don't retry other keys
+          break; // Parsed but no opportunities array; don't retry other keys.
         } else {
           console.warn(`[Groq key ${i + 1}] Returned status ${response.status}`);
-          break; // Non-429 error (400/500) — won't be fixed by rotating keys
+          break; // Non-429 error (400/500) won't be fixed by rotating keys.
         }
       } catch (err) {
         console.warn(`[Groq key ${i + 1}] Call failed:`, err);
@@ -230,7 +258,7 @@ Rules: only specific roles (e.g. "SWE Intern"), not categories. applyUrl must be
           console.warn(`[${companyId}] Claude returned empty/null response. Skipping.`);
           return [];
         }
-        const jsonMatch = content.match(/\[[\s\S]*?\]/);
+        const jsonMatch = content.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
           return JSON.parse(jsonMatch[0]);
         }
@@ -289,7 +317,7 @@ Rules: only specific roles (e.g. "SWE Intern"), not categories. applyUrl must be
           console.warn(`[${companyId}] Gemini returned empty/null response. Skipping.`);
           return [];
         }
-        const jsonMatch = content.match(/\[[\s\S]*?\]/);
+        const jsonMatch = content.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
           return JSON.parse(jsonMatch[0]);
         }

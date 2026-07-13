@@ -99,7 +99,7 @@ export async function fetchWithRetry(
         signal: localController.signal,
       });
 
-      const isTransient = response.status >= 500 && response.status <= 599;
+      const isTransient = response.status === 429 || (response.status >= 500 && response.status <= 599);
       if (isTransient) {
         if (attempt === maxRetries) {
           throw new Error(`Request to ${url} failed with status ${response.status} after ${maxRetries} attempts`);

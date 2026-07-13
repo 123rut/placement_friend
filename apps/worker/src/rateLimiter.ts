@@ -21,6 +21,9 @@ export function getDomain(urlStr: string): string {
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function acquireDomainSlot(domain: string): Promise<void> {
+  // Each failed re-check re-queues at the back. Under heavy concurrency for the
+  // same domain this is not strict FIFO, but releaseDomainSlot wakes one
+  // eligible waiter per release so it will not deadlock.
   while (activeGlobalRequests >= GLOBAL_MAX_CONCURRENCY || activeDomains.has(domain)) {
     await new Promise<void>((resolve) => {
       waitingQueue.push({ domain, resolve });

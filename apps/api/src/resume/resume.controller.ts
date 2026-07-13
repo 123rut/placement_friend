@@ -20,11 +20,15 @@ export class ResumeController {
 
   /**
    * POST /api/resume/parse
-   * Upload PDF or DOCX resume — extracts, embeds and stores candidate profile.
+   * Upload PDF or DOCX resume, then extract, embed, and store candidate profile.
    * Body: multipart/form-data { file, userId }
    */
   @Post("parse")
-  @UseInterceptors(FileInterceptor("file"))
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB cap for resume uploads.
+    }),
+  )
   async parseResume(
     @UploadedFile() file: Express.Multer.File,
     @Body("userId") userId: string

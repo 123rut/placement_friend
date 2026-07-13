@@ -5,7 +5,7 @@ import { Pool } from "pg";
 import { CandidateProfileRecord, CareerStage, ParsedProfile } from "../careerpilot.types";
 import { DB_POOL } from "../db/db.module";
 import { fetchWithRetry } from "../utils/fetch-retry";
-import { fetchGroqWithRotation } from "../utils/groq-keys";
+import { fetchGroqWithRotation, getGroqKeys } from "../utils/groq-keys";
 
 const SKILL_KEYWORDS = [
   "java",
@@ -180,7 +180,7 @@ export class ResumeService {
   }
 
   async parseWithLLM(rawText: string): Promise<ParsedProfile> {
-    const hasGroqKeys = !!(process.env.GROQ_API_KEY || process.env.GROQ_API_KEY_2 || process.env.GROQ_API_KEY_3);
+    const hasGroqKeys = getGroqKeys().length > 0;
     if (hasGroqKeys) {
       const prompt = `Extract structured data from this resume text. You MUST return exactly one valid JSON object matching the JSON Schema rules below. Do not wrap the JSON in Markdown code fences. Do not output prose, text, or warnings before or after the JSON.
 
@@ -198,7 +198,7 @@ ${rawText.slice(0, 6000)}`;
 
       try {
         const body = JSON.stringify({
-          model: "openai/gpt-oss-120b", // llama-3.3-70b-versatile shuts down 08/16/26 — migrate now
+          model: "openai/gpt-oss-120b",
           messages: [
             {
               role: "system",
@@ -215,7 +215,7 @@ ${rawText.slice(0, 6000)}`;
             },
           },
           temperature: 0.1,
-          max_tokens: 4096, // was unset — with this schema size, worth setting explicitly rather than trusting the model default
+          max_tokens: 4096,
         });
 
         const response = await fetchGroqWithRotation(body, AbortSignal.timeout(30000));

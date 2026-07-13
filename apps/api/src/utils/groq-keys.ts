@@ -1,16 +1,24 @@
 import { fetchWithRetry } from "./fetch-retry";
 
-export async function fetchGroqWithRotation(
-  body: string,
-  signal?: AbortSignal,
-  maxRetriesPerKey = 2,
-): Promise<Response> {
-  const keys = [
+/**
+ * Single source of truth for configured Groq keys. Keep availability checks and
+ * rotation in sync as more keys are added.
+ */
+export function getGroqKeys(): string[] {
+  return [
     process.env.GROQ_API_KEY,
     process.env.GROQ_API_KEY_2,
     process.env.GROQ_API_KEY_3,
     process.env.GROQ_API_KEY_4,
   ].filter(Boolean) as string[];
+}
+
+export async function fetchGroqWithRotation(
+  body: string,
+  signal?: AbortSignal,
+  maxRetriesPerKey = 2,
+): Promise<Response> {
+  const keys = getGroqKeys();
 
   if (keys.length === 0) {
     throw new Error("No Groq API keys configured");
