@@ -30,7 +30,7 @@ export async function POST() {
 
   try {
     // 10-minute timeout — sync iterates over many companies and generates embeddings
-    const response = await fetch(`${getCareerPilotApiBaseUrl()}/worker/sync`, {
+    const response = await fetch(`${getCareerPilotApiBaseUrl()}/sync`, {
       method: "POST",
       headers: getInternalHeaders(),
       body: JSON.stringify({ userId: user.id }),

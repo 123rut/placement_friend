@@ -3,7 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "workspaces": [
-    "apps/*",
+    "apps/api",
+    "apps/web",
     "packages/*"
   ],
   "scripts": {
@@ -15,11 +16,8 @@
     "dev:api": "npm --workspace api run start:dev",
     "build:api": "npm --workspace api run build",
     "start:api": "npm --workspace api run start:prod",
-    "dev:worker": "npm --workspace @piaa/worker run dev",
-    "build:worker": "npm --workspace @piaa/worker run build",
-    "typecheck:worker": "npm --workspace @piaa/worker run typecheck",
-    "build": "npm run build:api && npm run build:worker && npm run build:web",
-    "typecheck": "npm run typecheck:worker && npm run typecheck:web",
+    "build": "npm run build:api && npm run build:web",
+    "typecheck": "npm run typecheck:web",
     "validate:companies": "node --experimental-strip-types scripts/validate-company-catalog.mjs",
     "validate:companies:metadata": "node --experimental-strip-types scripts/validate-company-catalog.mjs --metadata-only",
     "db:init": "node --experimental-strip-types infra/init-db.ts"

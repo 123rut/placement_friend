@@ -32,7 +32,7 @@ interface TrackedCompanyDetail {
   category: string;
   status: string;
   ats: string;
-  lastCrawlStr: string;
+  lastSyncStr: string;
   jobsDiscovered: number;
   newJobsToday: number;
   matchScore: number | null;
@@ -158,19 +158,19 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
         ? matchedJobs.filter((j: any) => j.match_score >= 70).length
         : 0;
 
-      // Max last scraped
-      let maxLastScraped: Date | null = null;
+      // Max last sync time, stored in the legacy last_scraped_at column.
+      let maxLastSynced: Date | null = null;
       if (dbCompanies && dbCompanies.length > 0) {
         dbCompanies.forEach(c => {
           if (c.last_scraped_at) {
             const d = new Date(c.last_scraped_at);
-            if (!maxLastScraped || d > maxLastScraped) {
-              maxLastScraped = d;
+            if (!maxLastSynced || d > maxLastSynced) {
+              maxLastSynced = d;
             }
           }
         });
       }
-      const lastSyncTimeStr = maxLastScraped ? formatTimeAgo(maxLastScraped) : "Never";
+      const lastSyncTimeStr = maxLastSynced ? formatTimeAgo(maxLastSynced) : "Never";
 
       // 5. Recent Changes ribbon (last 24 hours)
       const { data: syncLogs, error: syncLogsError } = await supabase
@@ -260,7 +260,7 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
           category: c.category || "core",
           status: c.status || "active",
           ats: c.ats || "career_site",
-          lastCrawlStr: c.last_scraped_at ? formatTimeAgo(c.last_scraped_at) : "Never",
+          lastSyncStr: c.last_scraped_at ? formatTimeAgo(c.last_scraped_at) : "Never",
           jobsDiscovered: c.opportunities_found_last_run || 0,
           newJobsToday: newJobs?.filter(nj => nj.company_id === c.id).length || 0,
           matchScore: maxScore
@@ -546,7 +546,7 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
           <div style={{ fontSize: "3.5rem", marginBottom: "16px" }}>🔍</div>
           <h2 style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--text)" }}>No companies are being tracked yet.</h2>
           <p style={{ color: "var(--muted)", margin: "8px auto 24px", maxWidth: "380px", fontSize: "0.9rem" }}>
-            Build your watchlist first! Select employers to crawl in your profile, and they will populate here with live analytics.
+            Build your watchlist first. Select employers in your profile, and they will populate here with live sync analytics.
           </p>
           <Link href="/profile" className="primary-link" style={{ padding: "8px 24px" }}>
             Go to Profile / Add Companies
@@ -764,7 +764,7 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                           <span style={{ color: "var(--muted)" }}>Last Sync</span>
-                          <span>{tc.lastCrawlStr}</span>
+                          <span>{tc.lastSyncStr}</span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                           <span style={{ color: "var(--muted)" }}>Jobs Discovered</span>

@@ -21,10 +21,10 @@ NestJS backend for the CareerPilot MVP.
 - `GET /api/jobs/matches/:userId`
 - `POST /api/agent/chat`
 - `GET /api/agent/conversations/:userId`
-- `POST /api/worker/sync`
-- `POST /api/worker/sync/:companyId`
-- `GET /api/worker/sync/logs`
-- `GET /api/worker/sync/companies`
+- `POST /api/sync`
+- `POST /api/sync/:companyId`
+- `GET /api/sync/logs`
+- `GET /api/sync/companies`
 
 ## Build
 

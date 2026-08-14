@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST() {
   try {
-    const response = await fetch(`${getCareerPilotApiBaseUrl()}/worker/sync/stop`, {
+    const response = await fetch(`${getCareerPilotApiBaseUrl()}/sync/stop`, {
       method: "POST",
       headers: getInternalHeaders(),
       cache: "no-store",

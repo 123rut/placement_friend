@@ -11,7 +11,7 @@ export class AppService {
         "/api/jobs/search",
         "/api/jobs/match",
         "/api/agent/chat",
-        "/api/worker/sync",
+        "/api/sync",
       ],
     };
   }

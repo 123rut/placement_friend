@@ -280,7 +280,7 @@ export default function CompaniesPage() {
     }
   };
 
-  // Quick Action: Pause / Resume Scrape
+  // Quick Action: Pause / Resume Sync
   const handleToggleStatus = async (company: Company) => {
     const targetStatus = company.status === "paused" ? "active" : "paused";
     try {
@@ -299,7 +299,7 @@ export default function CompaniesPage() {
 
   // Quick Action: Archive Company (Soft Delete)
   const handleArchiveCompany = async (id: string) => {
-    if (!confirm("Are you sure you want to archive this company? Archived targets are excluded from active crawls.")) return;
+    if (!confirm("Are you sure you want to archive this company? Archived targets are excluded from active syncs.")) return;
     try {
       const res = await fetch(`${API_BASE_URL}/companies/${id}`, {
         method: "DELETE"
@@ -354,7 +354,7 @@ export default function CompaniesPage() {
           <span className="topbar-kicker">CareerPilot Registry</span>
           <h1 style={{ fontSize: "1.85rem", fontWeight: 800, margin: "4px 0 0" }}>ATS Company Watchlist</h1>
           <p style={{ color: "var(--muted)", margin: "4px 0 0", fontSize: "0.9rem" }}>
-            Add, update, and manage careers page tracking targets in the crawl index.
+            Add, update, and manage careers page tracking targets for ATS sync.
           </p>
         </div>
         <nav className="topbar-actions">
@@ -447,7 +447,7 @@ export default function CompaniesPage() {
 
           <div className="filter-row">
             <button className={`filter-chip ${statusFilter === "" ? "active" : ""}`} onClick={() => { setStatusFilter(""); setPage(1); }}>
-              All Active Crawls
+              All Active Syncs
             </button>
             <button className={`filter-chip ${statusFilter === "url_missing" ? "active" : ""}`} onClick={() => { setStatusFilter("url_missing"); setPage(1); }}>
               Missing URL
@@ -469,14 +469,14 @@ export default function CompaniesPage() {
 
         {isFastPolling.current && (
           <div className="alert-box alert-box-info" style={{ marginTop: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>⚡ Scraper pipeline updating live. Running fast checks every 5 seconds...</span>
+            <span>ATS sync updating live. Running fast checks every 5 seconds...</span>
             <span className="pill" style={{ minHeight: "auto", padding: "2px 8px" }}>Live Sync</span>
           </div>
         )}
 
         {/* Table View */}
         {loading ? (
-          <p style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>Loading scraping directory...</p>
+          <p style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>Loading ATS directory...</p>
         ) : companies.length === 0 ? (
           <p style={{ textAlign: "center", padding: "40px", color: "var(--muted)", background: "var(--surface)", borderRadius: "var(--radius)", border: "1px solid var(--line)", marginTop: "16px" }}>
             No companies match selected filter criteria.
@@ -576,7 +576,7 @@ export default function CompaniesPage() {
                       </td>
                       <td style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
                         <div>Last Checked: {company.last_checked_at ? new Date(company.last_checked_at).toLocaleTimeString() : "Never"}</div>
-                        <div>Last Scraped: {company.last_scraped_at ? new Date(company.last_scraped_at).toLocaleDateString() : "Never"}</div>
+                        <div>Last Synced: {company.last_scraped_at ? new Date(company.last_scraped_at).toLocaleDateString() : "Never"}</div>
                         <div>Found Last Run: <strong>{company.opportunities_found_last_run}</strong></div>
                       </td>
                       <td>

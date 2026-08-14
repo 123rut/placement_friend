@@ -93,24 +93,24 @@ export default async function DashboardPage() {
       .gte("created_at", oneDayAgo);
     newJobsTodayCount = newJobsCount || 0;
 
-    // Fetch company records to map company name and calculate max scraped time
+    // Fetch company records to map company name and calculate max sync time.
     const { data: dbCompanies } = await supabase
       .from("companies")
       .select("id, name, last_scraped_at")
       .in("id", trackedCompanyIds);
 
-    let maxLastScraped: Date | null = null;
+    let maxLastSynced: Date | null = null;
     (dbCompanies || []).forEach((c) => {
       if (c.last_scraped_at) {
         const d = new Date(c.last_scraped_at);
-        if (!maxLastScraped || d > maxLastScraped) {
-          maxLastScraped = d;
+        if (!maxLastSynced || d > maxLastSynced) {
+          maxLastSynced = d;
         }
       }
     });
 
-    if (maxLastScraped) {
-      lastSyncTimeStr = formatTimeAgo(maxLastScraped);
+    if (maxLastSynced) {
+      lastSyncTimeStr = formatTimeAgo(maxLastSynced);
     }
 
     // Query 5 most recent sync logs

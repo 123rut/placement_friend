@@ -30,7 +30,7 @@ interface MatchedJobCard {
   missing_skills: string[] | null;
 }
 
-interface ScrapedOpp {
+interface WatchlistOpportunity {
   id: string;
   company_name: string;
   role: string;
@@ -62,7 +62,7 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
     () => (Array.isArray(matchedJobsData) ? matchedJobsData : []),
     [matchedJobsData],
   );
-  const scrapedOpps: ScrapedOpp[] = useMemo(
+  const watchlistOpps: WatchlistOpportunity[] = useMemo(
     () => (oppsData?.data && Array.isArray(oppsData.data) ? oppsData.data : []),
     [oppsData],
   );
@@ -116,9 +116,9 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
     });
   }, [matchedJobs, search, minMatchScore]);
 
-  // Handle general scraped opportunities eligibility check + Search
+  // Handle watchlist opportunities eligibility check + search
   const filteredOpps = useMemo(() => {
-    return scrapedOpps.filter((opp) => {
+    return watchlistOpps.filter((opp) => {
       // 1. Search term match
       const query = search.toLowerCase();
       const matchesSearch =
@@ -141,7 +141,7 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
 
       return true;
     });
-  }, [scrapedOpps, search, onlyEligible, studentCgpa, student.branch]);
+  }, [watchlistOpps, search, onlyEligible, studentCgpa, student.branch]);
 
   // Reset page numbers when search query or filter changes
   React.useEffect(() => {
@@ -330,7 +330,7 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
               <div className="empty-state">
                 <h3>No openings found</h3>
                 <p>
-                  No scraped jobs align with your criteria. Ensure you are tracking companies in Watchlist Settings.
+                  No synced jobs align with your criteria. Ensure you are tracking companies in Watchlist Settings.
                 </p>
               </div>
             ) : (

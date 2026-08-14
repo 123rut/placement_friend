@@ -21,7 +21,6 @@ The current product experience is powered by CareerPilot AI: a resume-aware care
 apps/
   api/       NestJS API for resumes, jobs, matching, agent chat, and sync triggers
   web/       Next.js frontend and server-side proxy API routes
-  worker/    ATS adapters, scraping, scheduling, matching, and notifications
 packages/
   domain/    Shared domain types, company catalog, and eligibility helpers
 infra/       PostgreSQL/Supabase schema, seed data, and database init scripts
@@ -40,7 +39,6 @@ scripts/     Validation and utility scripts
 - pgvector for embedding search
 - Groq for LLM extraction/planning
 - Gemini for embeddings and optional fallback parsing
-- Playwright/Cheerio-based worker foundations
 
 ## Prerequisites
 
@@ -71,12 +69,6 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 CAREERPILOT_API_URL=http://127.0.0.1:4000/api
 
-# Worker settings
-STUDENT_ID=
-LOGGED_IN_STUDENT_ID=
-SCRAPER_POLL_INTERVAL_MS=3600000
-NOTIFIER_ENABLED=true
-FIRECRAWL_API_KEY=
 ```
 
 `INTERNAL_API_KEY` is used only for server-to-server communication between the web proxy routes and the NestJS API. It must not be exposed to browser code.
@@ -123,12 +115,6 @@ The web app listens at:
 http://localhost:3000
 ```
 
-Run the worker:
-
-```bash
-npm run dev:worker
-```
-
 ## Validation And Build
 
 Use these commands before deployment:
@@ -166,11 +152,11 @@ The NestJS API uses the global `/api` prefix.
 - `GET /api/jobs/matches/:userId`
 - `POST /api/agent/chat`
 - `GET /api/agent/conversations/:userId`
-- `POST /api/worker/sync`
-- `POST /api/worker/sync/stop`
-- `GET /api/worker/sync/status`
-- `GET /api/worker/sync/logs`
-- `POST /api/worker/sync/:companyId`
+- `POST /api/sync`
+- `POST /api/sync/stop`
+- `GET /api/sync/status`
+- `GET /api/sync/logs`
+- `POST /api/sync/:companyId`
 
 ## Supported ATS Providers
 
@@ -195,7 +181,6 @@ The NestJS API uses the global `/api` prefix.
 
 - `apps/web` owns the user-facing product and authenticated server proxy routes.
 - `apps/api` owns CareerPilot workflows, AI calls, resume parsing, matching, and sync triggers.
-- `apps/worker` owns background scraping, ATS adapters, and notification helpers.
 - `packages/domain` owns shared company and eligibility domain data.
 
 ## Product Direction
