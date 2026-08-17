@@ -170,7 +170,8 @@ export class JobsService {
 
     const jobRes = await this.pool.query(
       `SELECT j.*,
-              c.name AS company_name
+              c.name AS company_name,
+              c.min_cgpa
        FROM jobs j
        JOIN companies c ON j.company_id = c.id
        WHERE j.id = $1::uuid`,
@@ -194,19 +195,20 @@ export class JobsService {
       vectorScore = simRes.rows[0]?.score ?? null;
     }
 
-    let studentRecord: { batchYear: number | null; branch: string | null } = {
+    let studentRecord: { batchYear: number | null; branch: string | null; cgpa?: number | null } = {
       batchYear: null,
       branch: null,
     };
     try {
       const studentRes = await this.pool.query(
-        "SELECT batch_year, branch FROM students WHERE id = $1",
+        "SELECT batch_year, branch, cgpa FROM students WHERE id = $1",
         [userId]
       );
       if (studentRes.rows[0]) {
         studentRecord = {
           batchYear: Number(studentRes.rows[0].batch_year),
           branch: studentRes.rows[0].branch || null,
+          cgpa: studentRes.rows[0].cgpa !== null ? Number(studentRes.rows[0].cgpa) : null,
         };
       }
     } catch {
@@ -227,6 +229,7 @@ export class JobsService {
       String(job.title || ""),
       String(job.location || ""),
       studentRecord,
+      job.min_cgpa ? Number(job.min_cgpa) : null
     );
     const failedChecks = hardRequirements.filter((check) => !check.passed);
     const preferredRequirements = this.buildPreferredRequirementMatches(profile, jobText);
@@ -258,8 +261,8 @@ export class JobsService {
     }
 
     const explanation = options.fast
-      ? this.buildHeuristicMatch(profile, job, vectorScore, studentRecord.batchYear)
-      : await this.generateMatchExplanation(profile, job, vectorScore, studentRecord.batchYear);
+      ? this.buildHeuristicMatch(profile, job, vectorScore, studentRecord.batchYear, job.min_cgpa ? Number(job.min_cgpa) : null, studentRecord.cgpa ?? null)
+      : await this.generateMatchExplanation(profile, job, vectorScore, studentRecord.batchYear, job.min_cgpa ? Number(job.min_cgpa) : null, studentRecord.cgpa ?? null);
     const preferredScore = this.calculatePreferredRequirementScore(preferredRequirements);
     const finalScore = Math.round(explanation.matchScore * 0.65 + preferredScore * 0.35);
 
@@ -389,8 +392,10 @@ export class JobsService {
     job: Record<string, unknown>,
     vectorScore: number | null,
     batchYear: number | null,
+    minCgpa?: number | null,
+    studentCgpa?: number | null,
   ): Promise<MatchExplanation> {
-    const defaultResult = this.buildHeuristicMatch(profile, job, vectorScore, batchYear);
+    const defaultResult = this.buildHeuristicMatch(profile, job, vectorScore, batchYear, minCgpa, studentCgpa);
     const hasGroqKeys = !!(process.env.GROQ_API_KEY || process.env.GROQ_API_KEY_2 || process.env.GROQ_API_KEY_3);
 
     let finalExplanation = defaultResult;
@@ -444,7 +449,7 @@ Return JSON only:
 
     // Safety Override: Enforce student batch graduation vs senior experience hard constraint & compulsory requirements verification
     const jobText = `${String(job.title || "")} ${String(job.description || "")}`.toLowerCase();
-    const verification = this.verifyCompulsoryRequirements(profile, jobText, String(job.title || ""), batchYear);
+    const verification = this.verifyCompulsoryRequirements(profile, jobText, String(job.title || ""), batchYear, minCgpa, studentCgpa);
 
     if (!verification.ok) {
       finalExplanation.matchScore = 12;
@@ -459,6 +464,8 @@ Return JSON only:
     job: Record<string, unknown>,
     vectorScore: number | null,
     batchYear: number | null,
+    minCgpa?: number | null,
+    studentCgpa?: number | null,
   ): MatchExplanation {
     const jobText = `${String(job.title || "")} ${String(job.description || "")}`.toLowerCase();
     const normalizedSkills = profile.skills.map((skill) => skill.toLowerCase());
@@ -468,7 +475,7 @@ Return JSON only:
     const scoreBoost = Math.min(25, matchedSkills.length * 8);
 
     // Run compulsory checks
-    const verification = this.verifyCompulsoryRequirements(profile, jobText, String(job.title || ""), batchYear);
+    const verification = this.verifyCompulsoryRequirements(profile, jobText, String(job.title || ""), batchYear, minCgpa, studentCgpa);
 
     if (!verification.ok) {
       return {
@@ -500,6 +507,8 @@ Return JSON only:
     jobText: string,
     jobTitle: string,
     batchYear: number | null,
+    minCgpa?: number | null,
+    studentCgpa?: number | null,
   ): { ok: boolean; mismatches: string[] } {
     const mismatches: string[] = [];
 
@@ -534,6 +543,11 @@ Return JSON only:
       mismatches.push("This is a Senior/Lead/Staff level role, which is unsuitable for a graduating student profile.");
     }
 
+    // 4. Check CGPA Requirement
+    if (minCgpa !== undefined && minCgpa !== null && (studentCgpa === undefined || studentCgpa === null || studentCgpa < minCgpa)) {
+      mismatches.push(`Job requires a minimum CGPA of ${minCgpa}, but your profile shows ${studentCgpa || "no CGPA"}.`);
+    }
+
     return {
       ok: mismatches.length === 0,
       mismatches,
@@ -545,7 +559,8 @@ Return JSON only:
     jobText: string,
     jobTitle: string,
     jobLocation: string,
-    studentRecord: { batchYear: number | null; branch: string | null },
+    studentRecord: { batchYear: number | null; branch: string | null; cgpa?: number | null },
+    minCgpa?: number | null,
   ): RequirementCheck[] {
     const checks: RequirementCheck[] = [];
     const batchYear = studentRecord.batchYear;
@@ -555,7 +570,7 @@ Return JSON only:
 
     checks.push({
       label: "Experience",
-      passed: requiredYears === 0 || (!isStudent && candidateYears >= requiredYears) || (isStudent && requiredYears < 2),
+      passed: requiredYears === 0 || candidateYears >= requiredYears,
       detail:
         requiredYears === 0
           ? "No explicit experience minimum was detected."
@@ -628,6 +643,17 @@ Return JSON only:
         isSenior && isStudent
           ? "This is a Senior/Lead/Staff level role, which is unsuitable for a graduating student profile."
           : "No seniority conflict was detected.",
+    });
+
+    const cgpaPassed = minCgpa == null || (studentRecord.cgpa != null && studentRecord.cgpa >= minCgpa);
+    checks.push({
+      label: "CGPA",
+      passed: cgpaPassed,
+      detail: minCgpa == null
+        ? "No explicit CGPA minimum was detected."
+        : cgpaPassed
+          ? `Your CGPA (${studentRecord.cgpa}) meets the requirement (${minCgpa}+).`
+          : `Job requires a minimum CGPA of ${minCgpa}, but your profile shows ${studentRecord.cgpa || "no CGPA"}.`,
     });
 
     return checks;

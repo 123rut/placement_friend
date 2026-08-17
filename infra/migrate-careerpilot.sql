@@ -28,17 +28,51 @@ CREATE TABLE IF NOT EXISTS jobs (
   description      TEXT,                      -- full JD text — used for embeddings
   salary_min       INTEGER,
   salary_max       INTEGER,
-  url              TEXT UNIQUE NOT NULL,
+  url              TEXT,
+  source           VARCHAR(50) NOT NULL,
+  company          VARCHAR(255) NOT NULL,
+  job_id           VARCHAR(255) NOT NULL,
   job_number       TEXT,
   posted_at        TIMESTAMPTZ,
   embedding        VECTOR(768),               -- Gemini text-embedding-004 outputs 768 dims
   last_synced      TIMESTAMPTZ DEFAULT NOW(),
-  created_at       TIMESTAMPTZ DEFAULT NOW()
+  created_at       TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT uq_jobs_source_company_jobid UNIQUE (source, company, job_id)
 );
+
+ALTER TABLE jobs
+  ADD COLUMN IF NOT EXISTS source VARCHAR(50),
+  ADD COLUMN IF NOT EXISTS company VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS job_id VARCHAR(255);
+
+ALTER TABLE jobs ALTER COLUMN url DROP NOT NULL;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'jobs'::regclass
+      AND conname = 'jobs_url_key'
+  ) THEN
+    ALTER TABLE jobs DROP CONSTRAINT jobs_url_key;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'jobs'::regclass
+      AND conname = 'uq_jobs_source_company_jobid'
+  ) THEN
+    ALTER TABLE jobs ADD CONSTRAINT uq_jobs_source_company_jobid
+      UNIQUE (source, company, job_id);
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS jobs_company_id_idx ON jobs(company_id);
 CREATE INDEX IF NOT EXISTS jobs_employment_type_idx ON jobs(employment_type);
 CREATE INDEX IF NOT EXISTS jobs_job_number_idx ON jobs(job_number);
+CREATE INDEX IF NOT EXISTS jobs_source_company_jobid_idx ON jobs(source, company, job_id);
 CREATE INDEX IF NOT EXISTS jobs_embedding_idx ON jobs USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 -- 4. Candidate profiles — parsed from resumes
