@@ -9,14 +9,14 @@ export class JobsController {
   /** POST /api/jobs/search — semantic job search */
   @Post("search")
   async search(
-    @Body("query") query: string,
+    @Body("query") query?: string,
     @Body("location") location?: string,
     @Body("employmentType") employmentType?: string,
     @Body("earlyCareerOnly") earlyCareerOnly?: boolean,
     @Body("limit") limit?: number
   ): Promise<{ count: number; results: JobSearchResult[] } | { error: string }> {
-    if (!query) return { error: "query is required" };
-    const results = await this.jobsService.searchJobs(query, { location, employmentType, earlyCareerOnly, limit });
+    if (!query && !location) return { error: "Either role keyword or location is required" };
+    const results = await this.jobsService.searchJobs(query || "", { location, employmentType, earlyCareerOnly, limit });
     return { count: results.length, results };
   }
 

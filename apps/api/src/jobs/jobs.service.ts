@@ -42,9 +42,10 @@ const SENIOR_EXPERIENCE_PATTERN =
 export class JobsService {
   constructor(@Inject(DB_POOL) private readonly pool: Pool) {}
 
-  async searchJobs(query: string, filters: JobSearchFilters = {}): Promise<JobSearchResult[]> {
+  async searchJobs(query = "", filters: JobSearchFilters = {}): Promise<JobSearchResult[]> {
     const limit = filters.limit || 20;
-    const embedding = await this.embedQuery(query);
+    const cleanQuery = (query || "").trim();
+    const embedding = cleanQuery ? await this.embedQuery(cleanQuery) : null;
 
     if (embedding) {
       const embStr = `[${embedding.join(",")}]`;
@@ -64,6 +65,7 @@ export class JobsService {
         FROM jobs j
         JOIN companies c ON j.company_id = c.id
         WHERE j.embedding IS NOT NULL
+          AND (j.relevance_status = 'APPROVED' OR j.relevance_status IS NULL)
       `;
       const params: Array<string | number> = [embStr];
 
@@ -88,10 +90,13 @@ export class JobsService {
       return res.rows;
     }
 
-    const clauses = [
-      `LOWER(j.title || ' ' || COALESCE(j.description, '')) LIKE LOWER($1)`,
-    ];
-    const params: Array<string | number> = [`%${query}%`];
+    const clauses: string[] = ["(j.relevance_status = 'APPROVED' OR j.relevance_status IS NULL)"];
+    const params: Array<string | number> = [];
+
+    if (cleanQuery) {
+      params.push(`%${cleanQuery}%`);
+      clauses.push(`LOWER(j.title || ' ' || COALESCE(j.description, '')) LIKE LOWER($${params.length})`);
+    }
 
     if (filters.location) {
       params.push(`%${filters.location}%`);
