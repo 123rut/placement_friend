@@ -1,27 +1,14 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
-
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { mutate } from "swr";
-import type { Company, CompanyCategory } from "@piaa/domain";
-import { categoryLabels } from "../lib/sprint-one";
+import type { Company } from "@piaa/domain";
 import { createClient } from "../lib/supabase/client";
 import PreferencesPanel, { CompanyTarget } from "./PreferencesPanel";
 
 interface WatchlistClientProps {
   userId: string;
-  seedCompanies: Company[];
-}
-
-interface PriorityOpportunity {
-  id: string;
-  companyName: string;
-  role: string;
-  location: string;
-  matchScore: number;
-  postedAt: string;
-  applyUrl: string;
+  seedCompanies?: Company[];
 }
 
 interface TrackedCompanyDetail {
@@ -38,52 +25,15 @@ interface TrackedCompanyDetail {
   matchScore: number | null;
 }
 
-interface ActivityEvent {
-  companyName: string;
-  message: string;
-  timeAgo: string;
-}
-
-interface RankingItem {
-  companyName: string;
-  score: number;
-}
-
-interface RecentChange {
-  type: "new-jobs" | "sync" | "added";
-  label: string;
-  companyName: string;
-  timeAgo: string;
-  timestamp: number;
-}
-
 interface DashboardData {
   trackedCompaniesCount: number;
   newJobsTodayCount: number;
   resumeMatchesCount: number;
   lastSyncTimeStr: string;
-  recentChanges: RecentChange[];
-  priorityOpportunities: PriorityOpportunity[];
   trackedCompanies: TrackedCompanyDetail[];
-  activityFeed: ActivityEvent[];
-  resumeRanking: RankingItem[];
 }
 
-function formatTimeAgo(dateStr: string | Date) {
-  if (!dateStr) return "Never";
-  const date = typeof dateStr === "string" ? new Date(dateStr) : dateStr;
-  const diffMs = Date.now() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays === 1) return "Yesterday";
-  return `${diffDays}d ago`;
-}
-
-export default function WatchlistClient({ userId, seedCompanies }: WatchlistClientProps) {
+export default function WatchlistClient({ userId }: WatchlistClientProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,216 +52,186 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
     }
 
     try {
-      // 1. Fetch user targets
-      const { data: targets, error: targetsError } = await supabase
+      // 1. Fetch student's tracked company targets
+      const { data: targets, error: targetsErr } = await supabase
         .from("student_company_targets")
-        .select("company_id, notify_email, notify_dashboard")
+        .select("student_id, company_id, notify_via, notify_email, notify_dashboard, added_at, created_at")
         .eq("student_id", userId);
 
-      if (targetsError) throw targetsError;
-      setRawTargets(targets || []);
+      if (targetsErr) throw targetsErr;
 
       if (!targets || targets.length === 0) {
+        setRawTargets([]);
         setData({
           trackedCompaniesCount: 0,
           newJobsTodayCount: 0,
           resumeMatchesCount: 0,
           lastSyncTimeStr: "Never",
-          recentChanges: [],
-          priorityOpportunities: [],
           trackedCompanies: [],
-          activityFeed: [],
-          resumeRanking: []
         });
-        setLoading(false);
-        setRefreshing(false);
         return;
       }
 
-      const trackedCompanyIds = targets.map(t => t.company_id);
+      const targetCompanyIds = targets.map((t) => t.company_id);
 
-      // 2. Fetch company configurations
-      const { data: dbCompanies, error: companiesError } = await supabase
+      // 2. Fetch companies from companies table directly
+      const { data: companies, error: compErr } = await supabase
         .from("companies")
-        .select("*")
-        .in("id", trackedCompanyIds);
+        .select("id, name, slug, category, careers_url, status, last_scraped_at, last_checked_at")
+        .in("id", targetCompanyIds);
 
-      if (companiesError) throw companiesError;
+      if (compErr) throw compErr;
 
-      // 3. Fetch matched jobs from api
-      const jobsRes = await fetch("/api/careerpilot/jobs");
-      const matchedJobs = jobsRes.ok ? await jobsRes.json() : [];
+      const compMap: Record<string, any> = {};
+      (companies || []).forEach((c) => {
+        compMap[c.id] = c;
+      });
 
-      // 4. Calculate new jobs today
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { data: newJobs, error: newJobsError } = await supabase
+      const enrichedTargets = targets.map((t) => ({
+        ...t,
+        companies: compMap[t.company_id] || { id: t.company_id, name: t.company_id, slug: t.company_id },
+      }));
+      setRawTargets(enrichedTargets);
+
+      // 3. Fetch jobs for these companies
+      const { data: jobs } = await supabase
         .from("jobs")
-        .select("id, company_id")
-        .in("company_id", trackedCompanyIds)
-        .gte("created_at", oneDayAgo);
+        .select("id, company_id, title, location, posted_at, created_at, url")
+        .in("company_id", targetCompanyIds)
+        .order("posted_at", { ascending: false });
 
-      if (newJobsError) throw newJobsError;
-      const newJobsCount = newJobs?.length || 0;
-
-      // Count matches with score >= 70
-      const highMatchesCount = Array.isArray(matchedJobs) 
-        ? matchedJobs.filter((j: any) => j.match_score >= 70).length
-        : 0;
-
-      // Max last sync time, stored in the legacy last_scraped_at column.
-      let maxLastSynced: Date | null = null;
-      if (dbCompanies && dbCompanies.length > 0) {
-        dbCompanies.forEach(c => {
-          if (c.last_scraped_at) {
-            const d = new Date(c.last_scraped_at);
-            if (!maxLastSynced || d > maxLastSynced) {
-              maxLastSynced = d;
-            }
-          }
-        });
-      }
-      const lastSyncTimeStr = maxLastSynced ? formatTimeAgo(maxLastSynced) : "Never";
-
-      // 5. Recent Changes ribbon (last 24 hours)
-      const { data: syncLogs, error: syncLogsError } = await supabase
+      // 4. Fetch sync logs
+      const { data: syncLogs } = await supabase
         .from("sync_logs")
-        .select("created_at, jobs_found, jobs_new, status, company_id")
-        .in("company_id", trackedCompanyIds)
-        .gte("created_at", oneDayAgo)
-        .order("created_at", { ascending: false });
+        .select("company_id, status, error, created_at, jobs_found, jobs_new")
+        .in("company_id", targetCompanyIds)
+        .order("created_at", { ascending: false })
+        .limit(50);
 
-      if (syncLogsError) throw syncLogsError;
+      // 5. Fetch candidate's match scores
+      const matchMap: Record<string, number> = {};
+      try {
+        const { data: evaluations } = await supabase
+          .from("job_matches")
+          .select("job_id, match_score")
+          .eq("user_id", userId);
 
-      const recentChanges: RecentChange[] = [];
-      if (syncLogs) {
-        syncLogs.forEach((log: any) => {
-          const company = dbCompanies?.find(c => c.id === log.company_id);
-          const companyName = company?.name || log.company_id;
-          
-          if (log.jobs_new > 0) {
-            recentChanges.push({
-              type: "new-jobs",
-              label: `+${log.jobs_new} New Jobs`,
-              companyName,
-              timeAgo: formatTimeAgo(log.created_at),
-              timestamp: new Date(log.created_at).getTime()
-            });
-          } else if (log.status === "success") {
-            recentChanges.push({
-              type: "sync",
-              label: "Registry Updated",
-              companyName,
-              timeAgo: formatTimeAgo(log.created_at),
-              timestamp: new Date(log.created_at).getTime()
-            });
-          }
-        });
-      }
-
-      // Add recently added companies
-      if (dbCompanies) {
-        dbCompanies.forEach(c => {
-          if (c.created_at && new Date(c.created_at) >= new Date(oneDayAgo)) {
-            recentChanges.push({
-              type: "added",
-              label: "Company Tracked",
-              companyName: c.name,
-              timeAgo: formatTimeAgo(c.created_at),
-              timestamp: new Date(c.created_at).getTime()
-            });
-          }
-        });
-      }
-      recentChanges.sort((a, b) => b.timestamp - a.timestamp);
-
-      // 6. Priority Opportunities (Top 5 matched jobs of tracked companies sorted by score, then date)
-      const priorityOpportunities = Array.isArray(matchedJobs)
-        ? matchedJobs
-            .filter((j: any) => {
-              const company = dbCompanies?.find(c => c.name.toLowerCase() === j.company_name.toLowerCase());
-              return !!company;
-            })
-            .slice(0, 5)
-            .map((j: any) => ({
-              id: j.job_id || j.id,
-              companyName: j.company_name,
-              role: j.title,
-              location: j.location || "Bengaluru",
-              matchScore: j.match_score || 0,
-              postedAt: j.created_at || j.posted_at || new Date().toISOString(),
-              applyUrl: j.url || "#"
-            }))
-        : [];
-
-      // 7. Tracked Companies list
-      const trackedCompanies = (dbCompanies || []).map(c => {
-        const companyJobs = Array.isArray(matchedJobs)
-          ? matchedJobs.filter((j: any) => j.company_name.toLowerCase() === c.name.toLowerCase())
-          : [];
-        const maxScore = companyJobs.length > 0
-          ? Math.max(...companyJobs.map((j: any) => j.match_score || 0))
-          : null;
-
-        return {
-          id: c.id,
-          name: c.name,
-          slug: c.slug,
-          industry: c.industry || "Technology",
-          category: c.category || "core",
-          status: c.status || "active",
-          ats: c.ats || "career_site",
-          lastSyncStr: c.last_scraped_at ? formatTimeAgo(c.last_scraped_at) : "Never",
-          jobsDiscovered: c.opportunities_found_last_run || 0,
-          newJobsToday: newJobs?.filter(nj => nj.company_id === c.id).length || 0,
-          matchScore: maxScore
-        };
-      });
-
-      // 8. Activity Feed (from syncLogs)
-      const activityFeed = (syncLogs || []).slice(0, 5).map((log: any) => {
-        const company = dbCompanies?.find(c => c.id === log.company_id);
-        const companyName = company?.name || log.company_id;
-        let message = "Registry checked";
-        if (log.status === "failed") {
-          message = "Sync failed";
-        } else if (log.jobs_new > 0) {
-          message = `${log.jobs_new} new jobs detected`;
-        } else if (log.jobs_found > 0) {
-          message = `Registry checked (${log.jobs_found} jobs found)`;
-        } else {
-          message = `Registry synchronized`;
+        if (evaluations) {
+          evaluations.forEach((ev) => {
+            matchMap[ev.job_id] = ev.match_score;
+          });
         }
+      } catch {
+        // Continue gracefully
+      }
+
+      // Compute 24-hour window
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      let newJobsTodayCount = 0;
+      const companyJobsMap: Record<string, any[]> = {};
+
+      (jobs || []).forEach((j) => {
+        if (!companyJobsMap[j.company_id]) {
+          companyJobsMap[j.company_id] = [];
+        }
+        companyJobsMap[j.company_id].push(j);
+
+        const seenDate = j.posted_at || j.created_at;
+        if (seenDate && seenDate >= oneDayAgo) {
+          newJobsTodayCount++;
+        }
+      });
+
+      // Find latest sync timestamp
+      let latestSync: Date | null = null;
+      (syncLogs || []).forEach((log) => {
+        if (log.created_at) {
+          const d = new Date(log.created_at);
+          if (!latestSync || d > latestSync) {
+            latestSync = d;
+          }
+        }
+      });
+
+      const trackedCompanies: TrackedCompanyDetail[] = enrichedTargets.map((t) => {
+        const c = t.companies as any;
+        const cJobs = companyJobsMap[t.company_id] || [];
+
+        let cNewJobsToday = 0;
+        let highestMatch: number | null = null;
+
+        cJobs.forEach((j) => {
+          const seenDate = j.posted_at || j.created_at;
+          if (seenDate && seenDate >= oneDayAgo) {
+            cNewJobsToday++;
+          }
+          if (matchMap[j.id] && (highestMatch === null || matchMap[j.id] > highestMatch)) {
+            highestMatch = matchMap[j.id];
+          }
+        });
+
+        // Determine sync status & last sync string
+        const cLog = (syncLogs || []).find((l) => l.company_id === t.company_id);
+        let lastSyncStr = "Never";
+        const syncDate = cLog?.created_at || c?.last_scraped_at || c?.last_checked_at;
+        if (syncDate) {
+          const diffMs = Date.now() - new Date(syncDate).getTime();
+          const diffMins = Math.floor(diffMs / 60000);
+          if (diffMins < 1) lastSyncStr = "Just now";
+          else if (diffMins < 60) lastSyncStr = `${diffMins}m ago`;
+          else {
+            const diffHours = Math.floor(diffMins / 60);
+            if (diffHours < 24) lastSyncStr = `${diffHours}h ago`;
+            else lastSyncStr = `${Math.floor(diffHours / 24)}d ago`;
+          }
+        }
+
+        let computedStatus = c?.status || "active";
+        if (!c?.careers_url) {
+          computedStatus = "url_missing";
+        } else if (cLog && cLog.status === "failed") {
+          computedStatus = "url_stale";
+        }
+
         return {
-          companyName,
-          message,
-          timeAgo: formatTimeAgo(log.created_at)
+          id: t.company_id,
+          name: c?.name || "Unknown Company",
+          slug: c?.slug || "",
+          industry: "Technology",
+          category: c?.category || "preferred",
+          status: computedStatus,
+          ats: "career_site",
+          lastSyncStr,
+          jobsDiscovered: cJobs.length,
+          newJobsToday: cNewJobsToday,
+          matchScore: highestMatch,
         };
       });
 
-      // 9. Resume Match Ranking
-      const resumeRanking = trackedCompanies
-        .filter(c => c.matchScore !== null)
-        .map(c => ({
-          companyName: c.name,
-          score: c.matchScore || 0
-        }))
-        .sort((a, b) => b.score - a.score);
+      // Compute lastSyncTimeStr
+      let lastSyncTimeStr = "Never";
+      if (latestSync) {
+        const diffMs = Date.now() - (latestSync as Date).getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        if (diffMins < 1) lastSyncTimeStr = "Just now";
+        else if (diffMins < 60) lastSyncTimeStr = `${diffMins}m ago`;
+        else {
+          const diffHours = Math.floor(diffMins / 60);
+          if (diffHours < 24) lastSyncTimeStr = `${diffHours}h ago`;
+          else lastSyncTimeStr = `${Math.floor(diffHours / 24)}d ago`;
+        }
+      }
 
       setData({
         trackedCompaniesCount: targets.length,
-        newJobsTodayCount: newJobsCount,
-        resumeMatchesCount: highMatchesCount,
+        newJobsTodayCount,
+        resumeMatchesCount: Object.keys(matchMap).length,
         lastSyncTimeStr,
-        recentChanges,
-        priorityOpportunities,
         trackedCompanies,
-        activityFeed,
-        resumeRanking
       });
-      setError(null);
     } catch (err: any) {
-      console.error("Dashboard load error:", err);
-      setError(err.message || "Failed to load dashboard data.");
+      console.error("WatchlistClient load error:", err);
+      setError(err?.message || "Failed to load dashboard");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -320,183 +240,121 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
 
   useEffect(() => {
     loadDashboardData();
-
-    // Auto refresh every 5 minutes
-    const interval = setInterval(() => {
-      loadDashboardData(true);
-    }, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
   }, [loadDashboardData]);
 
-  const syncAbortRef = useRef<AbortController | null>(null);
+  const syncAbortRef = React.useRef<AbortController | null>(null);
 
   const handleRefresh = async () => {
-    setRefreshing(true);
     setSyncError(null);
+    setRefreshing(true);
     const controller = new AbortController();
     syncAbortRef.current = controller;
     try {
-      const syncRes = await fetch("/api/careerpilot/sync", {
+      const res = await fetch("/api/careerpilot/sync", { 
         method: "POST",
         signal: controller.signal,
       });
-      const syncData = await syncRes.json().catch(() => ({}));
-      if (!syncRes.ok) {
-        setSyncError(syncData.error || "Failed to trigger active sync.");
-      } else {
-        setSyncError(null);
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSyncError(result.error || "Sync encountered an issue.");
       }
     } catch (err: any) {
       if (err?.name !== "AbortError") {
-        setSyncError("Network error: Could not reach the sync endpoint.");
+        setSyncError("Network error triggering sync.");
       }
     } finally {
       syncAbortRef.current = null;
       setRefreshing(false);
+      await loadDashboardData(true);
     }
-    await loadDashboardData(false);
   };
 
   const handleStopSync = async () => {
-    // 1. Immediately abort the in-flight fetch so button toggles back
-    syncAbortRef.current?.abort();
-    syncAbortRef.current = null;
+    if (syncAbortRef.current) {
+      syncAbortRef.current.abort();
+      syncAbortRef.current = null;
+    }
     setRefreshing(false);
-    setSyncError("Stopping...");
-    // 2. Signal backend to stop its loop
     try {
-      const res = await fetch("/api/careerpilot/sync/stop", { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      setSyncError(data.message || "Sync stopped.");
-    } catch {
-      setSyncError("Stop signal sent (backend finishing last company).");
-    }
-  };
-
-
-  const handlePreferencesRefresh = () => {
-    loadDashboardData(true);
-    mutate("/api/opportunities");
-  };
-
-  const handleRemoveCompany = async (companyId: string, companyName: string) => {
-    if (!confirm(`Are you sure you want to stop tracking ${companyName}? This stops monitoring and deletes your notification preferences.`)) {
-      return;
-    }
-
-    setRefreshing(true);
-    try {
-      const { error } = await supabase
-        .from("student_company_targets")
-        .delete()
-        .eq("student_id", userId)
-        .eq("company_id", companyId);
-
-      if (error) throw error;
-      await loadDashboardData(true);
-      mutate("/api/opportunities");
-    } catch (err: any) {
-      console.error("Failed to remove company:", err);
-      alert(`Error removing company: ${err.message}`);
-    } finally {
-      setRefreshing(false);
-    }
+      await fetch("/api/careerpilot/sync/stop", { method: "POST" });
+    } catch {}
+    await loadDashboardData(true);
   };
 
   const handlePauseTracking = async (companyId: string, currentStatus: string) => {
-    setRefreshing(true);
     const nextStatus = currentStatus === "paused" ? "active" : "paused";
-    const nextActive = currentStatus === "paused";
     try {
-      const { error } = await supabase
-        .from("companies")
-        .update({ status: nextStatus, is_active: nextActive })
-        .eq("id", companyId);
-
-      if (error) throw error;
+      await supabase.from("companies").update({ status: nextStatus }).eq("id", companyId);
       await loadDashboardData(true);
-    } catch (err: any) {
-      console.error("Failed to update status:", err);
-      alert(`Error toggling status: ${err.message}`);
-    } finally {
-      setRefreshing(false);
+    } catch (err) {
+      console.error("Failed to toggle status:", err);
+    }
+  };
+
+  const handleRemoveCompany = async (companyId: string, companyName: string) => {
+    if (!confirm(`Are you sure you want to stop tracking ${companyName}?`)) return;
+    try {
+      await supabase
+        .from("student_company_targets")
+        .delete()
+        .match({ student_id: userId, company_id: companyId });
+      await loadDashboardData(true);
+    } catch (err) {
+      console.error("Failed to remove company:", err);
     }
   };
 
   const handleToggleGlobalMonitoring = async () => {
     if (!data || data.trackedCompanies.length === 0) return;
-    setRefreshing(true);
-    const companyIds = data.trackedCompanies.map((c) => c.id);
     const allPaused = data.trackedCompanies.every((c) => c.status === "paused");
     const nextStatus = allPaused ? "active" : "paused";
-    const nextActive = allPaused;
 
     try {
-      const { error } = await supabase
-        .from("companies")
-        .update({ status: nextStatus, is_active: nextActive })
-        .in("id", companyIds);
-
-      if (error) throw error;
+      const companyIds = data.trackedCompanies.map((c) => c.id);
+      await supabase.from("companies").update({ status: nextStatus }).in("id", companyIds);
       await loadDashboardData(true);
-    } catch (err: any) {
-      console.error("Failed to toggle global monitoring:", err);
-      alert(`Error updating global monitoring: ${err.message}`);
-    } finally {
-      setRefreshing(false);
+    } catch (err) {
+      console.error("Failed to toggle all monitoring:", err);
     }
   };
 
   const initialTargets: CompanyTarget[] = useMemo(() => {
-    if (!data) return [];
-    return data.trackedCompanies.map((tc) => {
-      const targetRecord = rawTargets.find(t => t.company_id === tc.id);
+    return rawTargets.map((t) => {
+      const c = t.companies as any;
       return {
-        company_id: tc.id,
-        name: tc.name,
-        category: tc.category,
-        notify_email: targetRecord ? !!targetRecord.notify_email : true,
-        notify_dashboard: targetRecord ? !!targetRecord.notify_dashboard : true,
+        company_id: t.company_id,
+        name: c?.name || "Unknown",
+        category: c?.category || "preferred",
+        notify_email: Boolean(t.notify_email),
+        notify_dashboard: Boolean(t.notify_dashboard),
       };
     });
-  }, [data, rawTargets]);
+  }, [rawTargets]);
 
-  // Loading Skeleton State
-  if (loading) {
+  const handlePreferencesRefresh = async () => {
+    await loadDashboardData(true);
+  };
+
+  if (loading && !data) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-        {/* Header Skeleton */}
-        <div>
-          <div style={{ width: "120px", height: "14px", background: "var(--line)", borderRadius: "4px", marginBottom: "8px" }} className="skeleton-pulse" />
-          <div style={{ width: "300px", height: "28px", background: "var(--line)", borderRadius: "6px", marginBottom: "8px" }} className="skeleton-pulse" />
-          <div style={{ width: "500px", height: "16px", background: "var(--line)", borderRadius: "4px" }} className="skeleton-pulse" />
-        </div>
-
-        {/* Metrics Grid Skeleton */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "20px" }}>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="panel" style={{ height: "100px", background: "var(--surface-muted)" }}>
-              <div style={{ width: "50%", height: "12px", background: "var(--line)", borderRadius: "3px", marginBottom: "14px" }} className="skeleton-pulse" />
-              <div style={{ width: "30%", height: "24px", background: "var(--line)", borderRadius: "4px" }} className="skeleton-pulse" />
-            </div>
-          ))}
-        </div>
-
-        {/* Content stacked skeleton */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <div className="panel" style={{ height: "180px", background: "var(--surface-muted)" }}>
-            <div style={{ width: "30%", height: "16px", background: "var(--line)", borderRadius: "4px", marginBottom: "20px" }} className="skeleton-pulse" />
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} style={{ height: "30px", background: "var(--line)", borderRadius: "4px", marginBottom: "10px" }} className="skeleton-pulse" />
-            ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div className="skeleton" style={{ width: "120px", height: "14px", marginBottom: "8px" }} />
+            <div className="skeleton" style={{ width: "240px", height: "28px" }} />
           </div>
+          <div className="skeleton" style={{ width: "100px", height: "36px" }} />
         </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+          <div className="skeleton" style={{ height: "100px", borderRadius: "var(--radius)" }} />
+          <div className="skeleton" style={{ height: "100px", borderRadius: "var(--radius)" }} />
+          <div className="skeleton" style={{ height: "100px", borderRadius: "var(--radius)" }} />
+        </div>
+        <div className="skeleton" style={{ height: "260px", borderRadius: "var(--radius)" }} />
       </div>
     );
   }
 
-  // Error Recovery State
   if (error) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -508,7 +366,7 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
         <div className="panel" style={{ textAlign: "center", padding: "40px", border: "1px solid var(--accent-soft)", background: "var(--surface-muted)" }}>
           <h2 style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--text)" }}>We couldn&apos;t load your tracked companies.</h2>
           <p style={{ color: "var(--muted)", margin: "12px 0 24px", fontSize: "0.95rem" }}>
-            There was an error communicating with the database. Please try again or browse your opportunities.
+            {error || "There was an error communicating with the database. Please try again or browse your opportunities."}
           </p>
           <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
             <button className="primary-link" onClick={() => loadDashboardData()}>
@@ -523,7 +381,7 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
     );
   }
 
-  const allMonitoringPaused = data ? data.trackedCompanies.length > 0 && data.trackedCompanies.every(c => c.status === "paused") : false;
+  const allMonitoringPaused = data ? data.trackedCompanies.length > 0 && data.trackedCompanies.every((c) => c.status === "paused") : false;
 
   // Empty Watchlist State
   if (!data || data.trackedCompanies.length === 0) {
@@ -534,7 +392,7 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
             <span className="topbar-kicker">Target Companies</span>
             <h1 style={{ fontSize: "1.85rem", fontWeight: 800, margin: "4px 0 0" }}>Tracked Companies</h1>
             <p style={{ color: "var(--muted)", margin: "4px 0 0", fontSize: "0.9rem" }}>
-              Monitor hiring activity, AI matches, registry health and notification preferences for companies currently being tracked.
+              Monitor hiring activity, registry health, and scraping status for tracked employers.
             </p>
           </div>
           <Link href="/profile" className="primary-link">
@@ -558,8 +416,8 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-      {/* Header & Quick Actions */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px" }}>
+      {/* 1. Header & Quick Actions */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
         <div>
           <span className="topbar-kicker">Target Companies</span>
           <h1 style={{ fontSize: "1.85rem", fontWeight: 800, margin: "4px 0 0", display: "flex", alignItems: "center", gap: "8px" }}>
@@ -571,7 +429,7 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
             )}
           </h1>
           <p style={{ color: "var(--muted)", margin: "4px 0 0", fontSize: "0.9rem" }}>
-            Monitor hiring activity, AI matches, registry health and notification preferences for companies currently being tracked.
+            Monitor hiring activity, registry health, and scraping status for tracked employers.
           </p>
         </div>
 
@@ -625,200 +483,131 @@ export default function WatchlistClient({ userId, seedCompanies }: WatchlistClie
         </div>
       </div>
 
-
-
-      {/* Main stacked sections */}
+      {/* 3. Main Stacked Sections */}
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          
-          {/* 4. Priority Opportunities */}
-          <section className="panel" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div className="panel-header" style={{ marginBottom: 0 }}>
-              <div>
-                <div className="section-label">Priority Opportunities</div>
-                <h2>Top 5 high-fit listings across your watchlist</h2>
-              </div>
+        {/* Tracked Companies Cards */}
+        <section className="panel" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div className="panel-header" style={{ marginBottom: "8px" }}>
+            <div>
+              <div className="section-label">Registry Tracking</div>
+              <h2>Tracked Companies Monitor</h2>
             </div>
+          </div>
 
-            {data.priorityOpportunities.length === 0 ? (
-              <p className="panel-note" style={{ padding: "12px 0" }}>No matching opportunities yet.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {data.priorityOpportunities.map((opp) => (
-                  <div 
-                    key={opp.id} 
-                    style={{ 
-                      padding: "12px 16px", 
-                      border: "1px solid var(--line)", 
-                      borderRadius: "var(--radius)",
-                      background: "var(--surface-muted)",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: "12px"
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <strong style={{ fontSize: "0.95rem" }}>{opp.role}</strong>
-                        <span 
-                          style={{ 
-                            fontSize: "0.75rem", 
-                            fontWeight: "bold", 
-                            color: opp.matchScore >= 85 ? "green" : "var(--accent)", 
-                            background: "var(--surface)", 
-                            padding: "1px 6px",
-                            borderRadius: "4px",
-                            border: "1px solid var(--line)"
-                          }}
-                        >
-                          {opp.matchScore}% Match
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
+            {data.trackedCompanies.map((tc) => {
+              const statusIndicators: Record<string, { label: string; dot: string }> = {
+                active: { label: "Active", dot: "🟢" },
+                waiting: { label: "Waiting", dot: "🟡" },
+                paused: { label: "Paused", dot: "🔴" },
+                url_missing: { label: "Not Synced", dot: "⚪" },
+                url_stale: { label: "Not Synced", dot: "⚪" },
+              };
+              const indicator = statusIndicators[tc.status] || { label: tc.status, dot: "⚪" };
+
+              return (
+                <div 
+                  key={tc.id} 
+                  className="preference-card" 
+                  style={{ 
+                    padding: "16px", 
+                    border: "1px solid var(--line)", 
+                    borderRadius: "var(--radius)",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    background: tc.status === "paused" ? "rgba(0,0,0,0.05)" : "var(--surface)",
+                  }}
+                >
+                  <div>
+                    {/* Company Logo / Initials header */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                      <div 
+                        style={{ 
+                          width: "36px", 
+                          height: "36px", 
+                          borderRadius: "50%", 
+                          background: "var(--accent-soft)", 
+                          color: "var(--accent)", 
+                          display: "flex", 
+                          alignItems: "center", 
+                          justifyContent: "center",
+                          fontWeight: "bold",
+                          fontSize: "1.1rem",
+                        }}
+                      >
+                        {tc.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <strong style={{ fontSize: "1rem" }}>{tc.name}</strong>
+                        <div className="metric-footnote">{tc.industry}</div>
+                      </div>
+                    </div>
+
+                    {/* Info lines */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "0.85rem", marginTop: "12px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: "var(--muted)" }}>Status</span>
+                        <span>{indicator.dot} {indicator.label}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: "var(--muted)" }}>Last Sync</span>
+                        <span>{tc.lastSyncStr}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: "var(--muted)" }}>Jobs Discovered</span>
+                        <strong>{tc.jobsDiscovered}</strong>
+                      </div>
+                      {tc.newJobsToday > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ color: "var(--muted)" }}>New Jobs (24h)</span>
+                          <span style={{ color: "var(--accent)", fontWeight: "bold" }}>+{tc.newJobsToday}</span>
+                        </div>
+                      )}
+                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px", paddingTop: "4px", borderTop: "1px dashed var(--line)" }}>
+                        <span style={{ color: "var(--muted)" }}>Top Fit Score</span>
+                        <span style={{ fontWeight: "bold", color: tc.matchScore ? "var(--accent)" : "var(--muted)" }}>
+                          {tc.matchScore ? `${tc.matchScore}% Match` : "None"}
                         </span>
                       </div>
-                      <div className="metric-footnote" style={{ marginTop: "4px" }}>
-                        {opp.companyName} • {opp.location} • Posted {formatTimeAgo(opp.postedAt)}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: "6px" }}>
-                      <a href={opp.applyUrl} target="_blank" rel="noopener noreferrer" className="primary-link" style={{ padding: "4px 10px", fontSize: "0.8rem", display: "flex", alignItems: "center" }}>
-                        Apply
-                      </a>
-                      <Link href={`/opportunities?company=${encodeURIComponent(opp.companyName)}`} className="primary-link ghost-link" style={{ padding: "4px 10px", fontSize: "0.8rem", display: "flex", alignItems: "center" }}>
-                        Details
-                      </Link>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </section>
 
-          {/* 5. Tracked Companies Cards */}
-          <section className="panel" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div className="panel-header" style={{ marginBottom: "8px" }}>
-              <div>
-                <div className="section-label">Registry Tracking</div>
-                <h2>Tracked Companies Monitor</h2>
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
-              {data.trackedCompanies.map((tc) => {
-                const statusIndicators: Record<string, { label: string; dot: string }> = {
-                  active: { label: "Active", dot: "🟢" },
-                  waiting: { label: "Waiting", dot: "🟡" },
-                  paused: { label: "Paused", dot: "🔴" },
-                  url_missing: { label: "Not Synced", dot: "⚪" },
-                  url_stale: { label: "Not Synced", dot: "⚪" }
-                };
-                const indicator = statusIndicators[tc.status] || { label: tc.status, dot: "⚪" };
-
-                return (
-                  <div 
-                    key={tc.id} 
-                    className="preference-card" 
-                    style={{ 
-                      padding: "16px", 
-                      border: "1px solid var(--line)", 
-                      borderRadius: "var(--radius)",
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "space-between",
-                      gap: "12px",
-                      background: tc.status === "paused" ? "rgba(0,0,0,0.05)" : "var(--surface)"
-                    }}
-                  >
-                    <div>
-                      {/* Company Logo / Initials header */}
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-                        <div 
-                          style={{ 
-                            width: "36px", 
-                            height: "36px", 
-                            borderRadius: "50%", 
-                            background: "var(--accent-soft)", 
-                            color: "var(--accent)", 
-                            display: "flex", 
-                            alignItems: "center", 
-                            justifyContent: "center",
-                            fontWeight: "bold",
-                            fontSize: "1.1rem"
-                          }}
-                        >
-                          {tc.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <strong style={{ fontSize: "1rem" }}>{tc.name}</strong>
-                          <div className="metric-footnote">{tc.industry}</div>
-                        </div>
-                      </div>
-
-                      {/* Info lines */}
-                      <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "0.85rem", marginTop: "12px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ color: "var(--muted)" }}>Status</span>
-                          <span>{indicator.dot} {indicator.label}</span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ color: "var(--muted)" }}>Hiring Platform</span>
-                          <span style={{ fontWeight: "500" }}>{tc.ats === "career_site" ? "Career Site" : tc.ats.charAt(0).toUpperCase() + tc.ats.slice(1)}</span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ color: "var(--muted)" }}>Last Sync</span>
-                          <span>{tc.lastSyncStr}</span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ color: "var(--muted)" }}>Jobs Discovered</span>
-                          <strong>{tc.jobsDiscovered}</strong>
-                        </div>
-                        {tc.newJobsToday > 0 && (
-                          <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ color: "var(--muted)" }}>New Jobs (24h)</span>
-                            <span style={{ color: "var(--accent)", fontWeight: "bold" }}>+{tc.newJobsToday}</span>
-                          </div>
-                        )}
-                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px", paddingTop: "4px", borderTop: "1px dashed var(--line)" }}>
-                          <span style={{ color: "var(--muted)" }}>Top Fit Score</span>
-                          <span style={{ fontWeight: "bold", color: tc.matchScore ? "var(--accent)" : "var(--muted)" }}>
-                            {tc.matchScore ? `${tc.matchScore}% Match` : "None"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Action buttons */}
-                    <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
-                      <Link 
-                        href={`/opportunities?company=${encodeURIComponent(tc.name)}`}
-                        className="primary-link"
-                        style={{ flex: 1, textAlign: "center", padding: "4px 0", fontSize: "0.8rem" }}
-                      >
-                        View Jobs
-                      </Link>
-                      <button 
-                        type="button"
-                        onClick={() => handlePauseTracking(tc.id, tc.status)}
-                        className="primary-link ghost-link"
-                        style={{ flex: 1, padding: "4px 0", fontSize: "0.8rem" }}
-                      >
-                        {tc.status === "paused" ? "Resume" : "Pause"}
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={() => handleRemoveCompany(tc.id, tc.name)}
-                        className="primary-link ghost-link"
-                        style={{ flex: 1, padding: "4px 0", fontSize: "0.8rem", color: "var(--accent)" }}
-                      >
-                        Remove
-                      </button>
-                    </div>
+                  {/* Action buttons */}
+                  <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                    <Link 
+                      href={`/opportunities?company=${encodeURIComponent(tc.name)}`}
+                      className="primary-link"
+                      style={{ flex: 1, textAlign: "center", padding: "4px 0", fontSize: "0.8rem" }}
+                    >
+                      View Jobs
+                    </Link>
+                    <button 
+                      type="button"
+                      onClick={() => handlePauseTracking(tc.id, tc.status)}
+                      className="primary-link ghost-link"
+                      style={{ flex: 1, padding: "4px 0", fontSize: "0.8rem" }}
+                    >
+                      {tc.status === "paused" ? "Resume" : "Pause"}
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => handleRemoveCompany(tc.id, tc.name)}
+                      className="primary-link ghost-link"
+                      style={{ flex: 1, padding: "4px 0", fontSize: "0.8rem", color: "var(--accent)" }}
+                    >
+                      Remove
+                    </button>
                   </div>
-                );
-              })}
-            </div>
-          </section>
-        </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
 
-      {/* 7. Notification Preferences Accordions */}
+      {/* 4. Notification Preferences Accordions */}
       <PreferencesPanel
         initialTargets={initialTargets}
         onRefresh={handlePreferencesRefresh}

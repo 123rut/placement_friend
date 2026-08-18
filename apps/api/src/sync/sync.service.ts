@@ -41,13 +41,11 @@ export class SyncService {
     private readonly jobsService: JobsService,
   ) {}
 
-  /** Signal the running syncAll loop to stop after the current company finishes. */
+  /** Signal the running syncAll loop to stop immediately. */
   stopSync(): { message: string } {
-    if (!this.isSyncing) {
-      return { message: "No sync is currently running." };
-    }
     this.cancelRequested = true;
-    return { message: "Stop signal sent. Sync will stop after the current company finishes." };
+    console.log("[Sync] Stop signal requested by user.");
+    return { message: "Stop signal sent. Canceling active sync immediately." };
   }
 
   getSyncStatus(): { isSyncing: boolean; cancelRequested: boolean } {
@@ -93,96 +91,107 @@ export class SyncService {
   }
 
   async syncAll(userId?: string): Promise<SyncResult[]> {
+    if (this.isSyncing) {
+      console.log("[Sync] Sync already in progress, rejecting duplicate trigger.");
+      return [];
+    }
+
     this.cancelRequested = false;
     this.isSyncing = true;
-    let studentProfile: any = null;
-    let studentRecord: any = null;
-    if (userId) {
-      try {
-        const profileRes = await this.pool.query(
-          "SELECT skills, experience, education, preferred_location FROM candidate_profiles WHERE user_id = $1::uuid",
-          [userId]
-        );
-        if (profileRes.rows[0]) {
-          studentProfile = profileRes.rows[0];
-        }
-        const studentRes = await this.pool.query(
-          "SELECT branch, cgpa, batch_year FROM students WHERE id = $1",
-          [userId]
-        );
-        if (studentRes.rows[0]) {
-          studentRecord = studentRes.rows[0];
-        }
-      } catch (err: any) {
-        console.warn("[Sync] Student profile query failed:", err.message);
-      }
-    }
+    const results: SyncResult[] = [];
 
-    let companies = await this.getCompanies();
-    if (studentRecord) {
-      const initialCount = companies.length;
-      companies = companies.filter((company: any) => {
-        // Check CGPA Minimum Constraint
-        if (company.min_cgpa && studentRecord.cgpa < Number(company.min_cgpa)) {
-          console.log(`[Sync Filter] Skipping company ${company.name} due to CGPA constraint (Requires: ${company.min_cgpa}, Student CGPA: ${studentRecord.cgpa})`);
-          return false;
+    try {
+      let studentProfile: any = null;
+      let studentRecord: any = null;
+      if (userId) {
+        try {
+          const profileRes = await this.pool.query(
+            "SELECT skills, experience, education, preferred_location FROM candidate_profiles WHERE user_id = $1::uuid",
+            [userId]
+          );
+          if (profileRes.rows[0]) {
+            studentProfile = profileRes.rows[0];
+          }
+          const studentRes = await this.pool.query(
+            "SELECT branch, cgpa, batch_year FROM students WHERE id = $1",
+            [userId]
+          );
+          if (studentRes.rows[0]) {
+            studentRecord = studentRes.rows[0];
+          }
+        } catch (err: any) {
+          console.warn("[Sync] Student profile query failed:", err.message);
         }
-        // Check Eligible Branches Constraint
-        if (company.eligible_branches) {
-          const rawBranches = String(company.eligible_branches);
-          // Handle PostgreSQL array format or comma-separated string
-          const cleanBranches = rawBranches.replace(/[{}"']/g, "").split(",").map(b => b.trim().toLowerCase()).filter(Boolean);
-          if (cleanBranches.length > 0 && !cleanBranches.includes(studentRecord.branch.toLowerCase())) {
-            console.log(`[Sync Filter] Skipping company ${company.name} due to branch constraint (Eligible: ${cleanBranches.join(", ")}, Student Branch: ${studentRecord.branch})`);
+      }
+
+      let companies = await this.getCompanies();
+      if (studentRecord) {
+        const initialCount = companies.length;
+        companies = companies.filter((company: any) => {
+          if (company.min_cgpa && studentRecord.cgpa < Number(company.min_cgpa)) {
+            console.log(`[Sync Filter] Skipping company ${company.name} due to CGPA constraint`);
             return false;
           }
+          if (company.eligible_branches) {
+            const rawBranches = String(company.eligible_branches);
+            const cleanBranches = rawBranches.replace(/[{}"']/g, "").split(",").map(b => b.trim().toLowerCase()).filter(Boolean);
+            if (cleanBranches.length > 0 && !cleanBranches.includes(studentRecord.branch.toLowerCase())) {
+              console.log(`[Sync Filter] Skipping company ${company.name} due to branch constraint`);
+              return false;
+            }
+          }
+          return true;
+        });
+        console.log(`[Sync] Personalizing sync. Syncing ${companies.length} out of ${initialCount} companies.`);
+      }
+
+      for (const company of companies) {
+        if (this.cancelRequested) {
+          console.log("[Sync] Stop signal received. Halting company sync loop.");
+          break;
         }
-        return true;
-      });
-      console.log(`[Sync] Personalizing sync. Syncing ${companies.length} out of ${initialCount} companies.`);
+
+        const COMPANY_TIMEOUT_MS = 60_000;
+        const timeoutResult: SyncResult = {
+          companyId: company.id,
+          companyName: company.name,
+          status: "failed",
+          jobsFound: 0,
+          jobsNew: 0,
+          durationMs: COMPANY_TIMEOUT_MS,
+          error: `Sync timed out after ${COMPANY_TIMEOUT_MS / 1000}s`,
+        };
+
+        const result = await Promise.race([
+          this.syncCompany(company, studentProfile, studentRecord, userId),
+          new Promise<SyncResult>((resolve) =>
+            setTimeout(() => resolve(timeoutResult), COMPANY_TIMEOUT_MS)
+          ),
+        ]);
+
+        results.push(result);
+        if (result.status === "failed") {
+          console.warn(`[Sync] Continuing after ${result.companyName} failure: ${result.error || "Unknown error"}`);
+        }
+        await new Promise((r) => setTimeout(r, 100));
+
+        if (this.cancelRequested) {
+          console.log("[Sync] Stop signal received. Stopping sync loop gracefully.");
+          break;
+        }
+      }
+
+      const summary = this.summarizeSyncResults(results);
+      console.log(
+        `[Sync Complete] Companies Processed: ${summary.processed}; Succeeded: ${summary.succeeded}; Failed: ${summary.failed}; Jobs Found: ${summary.jobsFound}; New Jobs: ${summary.jobsNew}`,
+      );
+    } finally {
+      this.isSyncing = false;
+      this.cancelRequested = false;
     }
 
-    const results: SyncResult[] = [];
-    for (const company of companies) {
-      const COMPANY_TIMEOUT_MS = 90_000; // 90 s per company — prevents one slow ATS from blocking the rest
-      const timeoutResult: SyncResult = {
-        companyId: company.id,
-        companyName: company.name,
-        status: "failed",
-        jobsFound: 0,
-        jobsNew: 0,
-        durationMs: COMPANY_TIMEOUT_MS,
-        error: `Sync timed out after ${COMPANY_TIMEOUT_MS / 1000}s`,
-      };
-
-      const result = await Promise.race([
-        this.syncCompany(company, studentProfile, studentRecord, userId),
-        new Promise<SyncResult>((resolve) =>
-          setTimeout(() => resolve(timeoutResult), COMPANY_TIMEOUT_MS)
-        ),
-      ]);
-
-      results.push(result);
-      if (result.status === "failed") {
-        console.warn(`[Sync] Continuing after ${result.companyName} failure: ${result.error || "Unknown error"}`);
-      }
-      await new Promise((r) => setTimeout(r, 300));
-
-      if (this.cancelRequested) {
-        console.log("[Sync] Stop signal received. Stopping sync loop gracefully.");
-        break;
-      }
-    }
-    const summary = this.summarizeSyncResults(results);
-    console.log(
-      `[Sync Complete] Companies Processed: ${summary.processed}; Succeeded: ${summary.succeeded}; Failed: ${summary.failed}; Jobs Found: ${summary.jobsFound}; New Jobs: ${summary.jobsNew}`,
-    );
-    this.isSyncing = false;
-    this.cancelRequested = false;
     return results;
   }
-
-
 
   private async fetchJobsForATS(company: any): Promise<NormalizedJob[]> {
     switch (company.ats) {
@@ -345,6 +354,11 @@ export class SyncService {
       const existingMap = new Map(existingRes.rows.map(r => [this.jobIdentityKey(r.source, r.company, r.job_id), r]));
 
       for (const job of jobs) {
+        if (this.cancelRequested) {
+          console.log("[Sync] Stop signal detected during job insertion. Halting upsert.");
+          break;
+        }
+
         if (!job.source || !job.company || !job.jobId) continue;
 
         // Run Job Relevance & Experience Validation
@@ -462,9 +476,13 @@ export class SyncService {
     }
 
     // Match and score jobs after transaction commits (failure isolated)
-    if (userId && syncedJobIds.length > 0) {
+    if (userId && syncedJobIds.length > 0 && !this.cancelRequested) {
       console.log(`[Sync Auto-Match] Auto-scoring ${syncedJobIds.length} eligible approved jobs for user ${userId}...`);
       for (const jobId of syncedJobIds) {
+        if (this.cancelRequested) {
+          console.log("[Sync Auto-Match] Stop requested during scoring. Halting match.");
+          break;
+        }
         try {
           await this.jobsService.matchJobToProfile(jobId, userId, { fast: true });
         } catch (matchErr: any) {
@@ -573,103 +591,11 @@ export class SyncService {
     return html.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim();
   }
 
-
-
   async getSyncLogs(limit = 50) {
     const res = await this.pool.query(
       `SELECT sl.*, c.name as company_name FROM sync_logs sl JOIN companies c ON sl.company_id = c.id ORDER BY sl.created_at DESC LIMIT $1`,
       [limit]
     );
     return res.rows;
-  }
-
-  private checkJobEligibility(
-    job: NormalizedJob,
-    studentProfile?: any,
-    studentRecord?: any,
-  ): { eligible: boolean; reason?: string } {
-    const jobText = `${job.title} ${job.description}`.toLowerCase();
-
-    // 1. Check Experience Limits
-    const batchYear = studentRecord ? Number(studentRecord.batch_year) : null;
-    const isStudent = batchYear && (batchYear >= 2025 && batchYear <= 2028);
-
-    const patterns = [
-      /(\d+)\s*\+?\s*(?:years|yrs|year)\b/i,
-      /(\d+)\s*-\s*(\d+)\s*(?:years|yrs|year)\b/i,
-      /minimum\s*(?:of\s*)?(\d+)\s*(?:years|yrs|year)\b/i,
-      /required\s*(?:of\s*)?(\d+)\s*(?:years|yrs|year)\b/i,
-    ];
-    let requiredYears = 0;
-    for (const pattern of patterns) {
-      const match = jobText.match(pattern);
-      if (match) {
-        const years = parseInt(match[1], 10);
-        if (!isNaN(years)) {
-          requiredYears = years;
-          break;
-        }
-      }
-    }
-
-    let candidateYears = 0;
-    if (studentProfile && Array.isArray(studentProfile.experience)) {
-      for (const exp of studentProfile.experience) {
-        let years = Number(exp.years);
-        if (isNaN(years) && exp.startYear) {
-          const startMonth = Number(exp.startMonth) || 1;
-          const startYear = Number(exp.startYear);
-          const current = !!exp.current;
-          const endYear = current ? new Date().getFullYear() : (Number(exp.endYear) || startYear);
-          const endMonth = current ? (new Date().getMonth() + 1) : (Number(exp.endMonth) || startMonth);
-          const months = (endYear - startYear) * 12 + (endMonth - startMonth);
-          years = months > 0 ? Math.round((months / 12) * 100) / 100 : 0;
-        }
-        if (!isNaN(years) && years > 0) {
-          candidateYears += years;
-        }
-      }
-    }
-
-    if (requiredYears > 0) {
-      if (isStudent && requiredYears >= 2) {
-        return { eligible: false, reason: `Requires ${requiredYears}+ years experience, but candidate is a graduating student.` };
-      }
-      if (candidateYears < requiredYears) {
-        return { eligible: false, reason: `Requires ${requiredYears}+ years experience, but candidate has only ${candidateYears} year(s).` };
-      }
-    }
-
-    // 2. Check Degree Mismatch
-    const degrees: string[] = [];
-    if (/\b(b\.?tech|b\.?e\.?\b|bachelor|b\.s\.)/i.test(jobText)) degrees.push("Bachelor's");
-    if (/\b(m\.?tech|m\.?e\.?\b|master|m\.s\.)/i.test(jobText)) degrees.push("Master's");
-    if (/\bmca\b/i.test(jobText)) degrees.push("MCA");
-    if (/\b(ph\.?d|doctorate)/i.test(jobText)) degrees.push("PhD");
-
-    if (degrees.length > 0 && studentProfile && Array.isArray(studentProfile.education) && studentProfile.education.length > 0) {
-      const degreeMatched = studentProfile.education.some((edu: any) => {
-        const deg = String(edu.degree || "").toLowerCase();
-        return degrees.some((req) => {
-          if (req === "Bachelor's") return /\b(b\.?tech|b\.?e\.?\b|bachelor|b\.s\.)/i.test(deg);
-          if (req === "Master's") return /\b(m\.?tech|m\.?e\.?\b|master|m\.s\.)/i.test(deg);
-          if (req === "MCA") return /\bmca\b/i.test(deg);
-          if (req === "PhD") return /\b(ph\.?d|doctorate)/i.test(deg);
-          return false;
-        });
-      });
-      if (!degreeMatched) {
-        return { eligible: false, reason: `Requires ${degrees.join(" or ")} degree, but candidate has: ${studentProfile.education.map((e: any) => e.degree).join(", ")}.` };
-      }
-    }
-
-    // 3. Check Senior Title Constraint
-    const lowerTitle = job.title.toLowerCase();
-    const isSeniorTitle = /\b(senior|sr|lead|staff|principal|manager|architect|director|head|vp)\b/i.test(lowerTitle);
-    if (isSeniorTitle && isStudent) {
-      return { eligible: false, reason: "Senior role, unsuitable for graduating student profile." };
-    }
-
-    return { eligible: true };
   }
 }
