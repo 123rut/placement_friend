@@ -1,20 +1,13 @@
-import { NextResponse } from "next/server";
+import { updateSession } from "./lib/supabase/middleware";
 import type { NextRequest } from "next/server";
 
-export function middleware(request: NextRequest) {
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-pathname", request.nextUrl.pathname);
-
-  return NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  });
+export async function middleware(request: NextRequest) {
+  return await updateSession(request);
 }
 
 export const config = {
   matcher: [
-    // Match all paths except static files, next images, and api
-    "/((?!_next/static|_next/image|favicon.ico|api/).*)",
+    // Match all paths except static files, next images, favicon
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
