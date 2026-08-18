@@ -186,38 +186,34 @@ ALTER TABLE students ENABLE ROW LEVEL SECURITY;
 
 -- candidate_profiles: a user can only see/edit their own row
 DROP POLICY IF EXISTS "candidate can view own profile" ON candidate_profiles;
-CREATE POLICY "candidate can view own profile"
-  ON candidate_profiles
-  FOR SELECT
-  USING (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "candidate can update own profile" ON candidate_profiles;
-CREATE POLICY "candidate can update own profile"
-  ON candidate_profiles
-  FOR UPDATE
-  USING (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "candidate can insert own profile" ON candidate_profiles;
-CREATE POLICY "candidate can insert own profile"
+DROP POLICY IF EXISTS "candidate can manage own profile" ON candidate_profiles;
+
+CREATE POLICY "candidate can manage own profile"
   ON candidate_profiles
-  FOR INSERT
+  FOR ALL
+  USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
--- students: same pattern (students table PK is "id" of type text representing the auth.uid())
+-- students: user can select, insert, and update their own student profile row
 DROP POLICY IF EXISTS "student can view own row" ON students;
-CREATE POLICY "student can view own row"
-  ON students
-  FOR SELECT
-  USING (auth.uid()::text = id);
-
 DROP POLICY IF EXISTS "student can update own row" ON students;
-CREATE POLICY "student can update own row"
-  ON students
-  FOR UPDATE
-  USING (auth.uid()::text = id);
-
 DROP POLICY IF EXISTS "student can insert own row" ON students;
-CREATE POLICY "student can insert own row"
+DROP POLICY IF EXISTS "student can manage own row" ON students;
+
+CREATE POLICY "student can manage own row"
   ON students
-  FOR INSERT
+  FOR ALL
+  USING (auth.uid()::text = id)
   WITH CHECK (auth.uid()::text = id);
+
+-- student_company_targets: user can manage their own target company preferences
+ALTER TABLE student_company_targets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "student can manage own targets" ON student_company_targets;
+
+CREATE POLICY "student can manage own targets"
+  ON student_company_targets
+  FOR ALL
+  USING (auth.uid()::text = student_id)
+  WITH CHECK (auth.uid()::text = student_id);
