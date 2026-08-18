@@ -11,6 +11,46 @@ export class PortalController {
     return this.portalService.getOpportunities(studentId);
   }
 
+  @Post("opportunities/:jobId/view")
+  async markOpportunityViewed(
+    @Param("jobId") jobId: string,
+    @Query("studentId") studentId: string,
+    @Body("studentId") bodyStudentId?: string
+  ) {
+    const sId = studentId || bodyStudentId;
+    return this.portalService.markOpportunityViewed(jobId, sId!);
+  }
+
+  @Post("opportunities/:jobId/apply")
+  async markOpportunityApplied(
+    @Param("jobId") jobId: string,
+    @Query("studentId") studentId: string,
+    @Body("studentId") bodyStudentId?: string
+  ) {
+    const sId = studentId || bodyStudentId;
+    return this.portalService.markOpportunityApplied(jobId, sId!);
+  }
+
+  @Post("opportunities/:jobId/dismiss")
+  async dismissOpportunity(
+    @Param("jobId") jobId: string,
+    @Query("studentId") studentId: string,
+    @Body("studentId") bodyStudentId?: string
+  ) {
+    const sId = studentId || bodyStudentId;
+    return this.portalService.dismissOpportunity(jobId, sId!);
+  }
+
+  @Post("opportunities/:jobId/restore")
+  async restoreOpportunity(
+    @Param("jobId") jobId: string,
+    @Query("studentId") studentId: string,
+    @Body("studentId") bodyStudentId?: string
+  ) {
+    const sId = studentId || bodyStudentId;
+    return this.portalService.restoreOpportunity(jobId, sId!);
+  }
+
   // 2. Notifications
   @Get("notifications")
   async getNotifications(

@@ -312,11 +312,22 @@ export class JobsService {
               j.title,
               j.url,
               j.location,
-              c.name AS company_name
+              c.name AS company_name,
+              COALESCE(ot.status, 'NOT_VIEWED') AS status,
+              ot.viewed_at,
+              ot.applied_at
        FROM job_matches jm
        JOIN jobs j ON jm.job_id = j.id
        JOIN companies c ON j.company_id = c.id
-       WHERE jm.user_id = $1::uuid AND jm.match_score > 20
+       LEFT JOIN opportunity_tracking ot ON ot.job_id = j.id AND ot.student_id = $1::text
+       LEFT JOIN student_job_dismissals sjd ON sjd.student_id = $1::text AND (
+         sjd.job_id = j.id OR
+         (j.logical_job_key IS NOT NULL AND sjd.logical_job_key = j.logical_job_key)
+       )
+       WHERE jm.user_id = $1::uuid
+         AND jm.match_score > 20
+         AND (j.relevance_status = 'APPROVED' OR j.relevance_status IS NULL)
+         AND sjd.id IS NULL
        ORDER BY jm.match_score DESC
        LIMIT $2`,
       [userId, limit],
@@ -422,10 +433,11 @@ Return JSON only:
 
       try {
         const body = JSON.stringify({
-          model: "llama-3.3-70b-versatile",
+          model: "openai/gpt-oss-120b",
           messages: [{ role: "user", content: prompt }],
           response_format: { type: "json_object" },
           temperature: 0.2,
+          max_tokens: 800,
         });
 
         const res = await fetchGroqWithRotation(body, AbortSignal.timeout(20000));

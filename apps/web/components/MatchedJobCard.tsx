@@ -1,34 +1,37 @@
+"use client";
+
 import React, { useState, useEffect } from "react";
+import { OpportunityStatus } from "./OpportunityCard";
 
-export type OpportunityStatus = "NOT_VIEWED" | "VIEWED" | "APPLIED";
-
-export interface OpportunityData {
+export interface MatchedJobData {
   id: string;
+  job_id?: string;
+  title: string;
+  url: string;
+  location: string | null;
   company_name: string;
-  role: string;
-  role_type: string;
-  min_cgpa: number | null;
-  allowed_branches: string[];
-  deadline: string | null;
-  apply_url: string;
-  posted_at: string;
+  match_score: number | null;
+  explanation: string | null;
+  strengths: string[] | null;
+  missing_skills: string[] | null;
   status?: OpportunityStatus;
   viewed_at?: string | null;
   applied_at?: string | null;
 }
 
-interface OpportunityCardProps {
-  opportunity: OpportunityData;
+interface MatchedJobCardProps {
+  job: MatchedJobData;
   onStatusChange?: (jobId: string, newStatus: OpportunityStatus, appliedAt?: string) => void;
   onDismiss?: (jobId: string) => void;
 }
 
-export default function OpportunityCard({ opportunity, onStatusChange, onDismiss }: OpportunityCardProps) {
+export default function MatchedJobCard({ job, onStatusChange, onDismiss }: MatchedJobCardProps) {
+  const actualJobId = job.job_id || job.id;
   const [currentStatus, setCurrentStatus] = useState<OpportunityStatus>(
-    opportunity.status || "NOT_VIEWED"
+    job.status || "NOT_VIEWED"
   );
   const [appliedAtDate, setAppliedAtDate] = useState<string | null>(
-    opportunity.applied_at || null
+    job.applied_at || null
   );
   const [markingApplied, setMarkingApplied] = useState(false);
   const [dismissing, setDismissing] = useState(false);
@@ -38,44 +41,28 @@ export default function OpportunityCard({ opportunity, onStatusChange, onDismiss
     e.stopPropagation();
     if (dismissing) return;
     setDismissing(true);
-    onDismiss?.(opportunity.id);
+    onDismiss?.(actualJobId);
     try {
-      await fetch(`/api/opportunities/${opportunity.id}/dismiss`, { method: "POST" });
+      await fetch(`/api/opportunities/${actualJobId}/dismiss`, { method: "POST" });
     } catch (err) {
-      console.error("Failed to dismiss opportunity:", err);
+      console.error("Failed to dismiss matched job:", err);
     }
   };
 
   useEffect(() => {
-    if (opportunity.status) {
-      setCurrentStatus(opportunity.status);
+    if (job.status) {
+      setCurrentStatus(job.status);
     }
-    if (opportunity.applied_at) {
-      setAppliedAtDate(opportunity.applied_at);
+    if (job.applied_at) {
+      setAppliedAtDate(job.applied_at);
     }
-  }, [opportunity.status, opportunity.applied_at]);
-
-  const isUrgent = () => {
-    if (!opportunity.deadline) return false;
-    const diffTime = new Date(opportunity.deadline).getTime() - Date.now();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays >= 0 && diffDays <= 3;
-  };
-
-  const getDeadlineText = () => {
-    if (!opportunity.deadline) return "Rolling";
-    const date = new Date(opportunity.deadline);
-    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-  };
-
-  const formattedType = opportunity.role_type.charAt(0).toUpperCase() + opportunity.role_type.slice(1);
+  }, [job.status, job.applied_at]);
 
   const handleOpenRole = () => {
-    // Only transition from NOT_VIEWED to VIEWED (never downgrade APPLIED)
     if (currentStatus === "NOT_VIEWED") {
       setCurrentStatus("VIEWED");
-      onStatusChange?.(opportunity.id, "VIEWED");
-      fetch(`/api/opportunities/${opportunity.id}/view`, {
+      onStatusChange?.(actualJobId, "VIEWED");
+      fetch(`/api/opportunities/${actualJobId}/view`, {
         method: "POST",
       }).catch((err) => {
         console.error("Failed to record view tracking:", err);
@@ -90,10 +77,10 @@ export default function OpportunityCard({ opportunity, onStatusChange, onDismiss
     const nowIso = new Date().toISOString();
     setCurrentStatus("APPLIED");
     setAppliedAtDate(nowIso);
-    onStatusChange?.(opportunity.id, "APPLIED", nowIso);
+    onStatusChange?.(actualJobId, "APPLIED", nowIso);
 
     try {
-      const res = await fetch(`/api/opportunities/${opportunity.id}/apply`, {
+      const res = await fetch(`/api/opportunities/${actualJobId}/apply`, {
         method: "POST",
       });
       if (!res.ok) {
@@ -107,12 +94,15 @@ export default function OpportunityCard({ opportunity, onStatusChange, onDismiss
   };
 
   return (
-    <article className="panel opportunity-card">
+    <article
+      className="panel opportunity-card matched-job-card"
+      style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}
+    >
       <div>
         <div className="opportunity-topline">
           <div>
-            <span className="section-label accent-label">{opportunity.company_name}</span>
-            <h3 className="opportunity-title">{opportunity.role}</h3>
+            <span className="section-label accent-label">{job.company_name}</span>
+            <h3 className="opportunity-title">{job.title}</h3>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
             {currentStatus === "APPLIED" ? (
@@ -122,7 +112,9 @@ export default function OpportunityCard({ opportunity, onStatusChange, onDismiss
             ) : (
               <span className="pill status-gray">○ Not Viewed</span>
             )}
-            <span className="tile-badge">{formattedType}</span>
+            <span className="status-good" style={{ padding: "4px 10px", fontSize: "0.8rem" }}>
+              {job.match_score ? `${Math.round(job.match_score)}% Fit` : "Strong Fit"}
+            </span>
             <button
               type="button"
               onClick={handleDismiss}
@@ -147,28 +139,41 @@ export default function OpportunityCard({ opportunity, onStatusChange, onDismiss
           </div>
         </div>
 
-        <div className="opportunity-metadata">
+        <p className="panel-note" style={{ marginTop: "12px", color: "var(--text)", fontSize: "0.88rem" }}>
+          {job.explanation || "Calculated fit score matches candidate profile."}
+        </p>
+
+        <div className="opportunity-metadata" style={{ marginTop: "16px" }}>
           <div className="meta-row">
-            <span>Baseline requirement</span>
-            <strong>{opportunity.min_cgpa !== null ? `${opportunity.min_cgpa.toFixed(2)} CGPA` : "Open profile"}</strong>
+            <span>Location</span>
+            <strong>{job.location || "Not listed"}</strong>
           </div>
           <div className="meta-row">
-            <span>Eligible tracks</span>
-            <strong title={opportunity.allowed_branches.join(", ")}>
-              {opportunity.allowed_branches.length > 0 ? opportunity.allowed_branches.join(", ") : "All branches"}
+            <span>Strengths</span>
+            <strong title={(job.strengths || []).join(", ")} style={{ color: "var(--good)" }}>
+              {job.strengths && job.strengths.length > 0
+                ? job.strengths.slice(0, 2).join(", ")
+                : "Profile aligned"}
             </strong>
           </div>
           <div className="meta-row">
-            <span>Application window</span>
-            <span className={isUrgent() ? "status-warn" : "pill"}>{getDeadlineText()}</span>
+            <span>Gaps</span>
+            <strong
+              title={(job.missing_skills || []).join(", ")}
+              style={{ color: job.missing_skills && job.missing_skills.length > 0 ? "var(--warn)" : "var(--muted)" }}
+            >
+              {job.missing_skills && job.missing_skills.length > 0
+                ? job.missing_skills.slice(0, 2).join(", ")
+                : "No major gaps"}
+            </strong>
           </div>
         </div>
       </div>
 
-      <div className="opportunity-footer">
+      <div className="opportunity-footer" style={{ marginTop: "18px" }}>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
           <a
-            href={opportunity.apply_url}
+            href={job.url}
             target="_blank"
             rel="noopener noreferrer"
             onClick={handleOpenRole}
@@ -199,7 +204,7 @@ export default function OpportunityCard({ opportunity, onStatusChange, onDismiss
         </div>
 
         {currentStatus === "APPLIED" && (
-          <div style={{ fontSize: "0.78rem", color: "var(--good)", display: "flex", alignItems: "center", gap: "6px" }}>
+          <div style={{ fontSize: "0.78rem", color: "var(--good)", display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
             <span>✓ Application recorded</span>
             {appliedAtDate && (
               <span style={{ color: "var(--muted)" }}>
@@ -208,10 +213,6 @@ export default function OpportunityCard({ opportunity, onStatusChange, onDismiss
             )}
           </div>
         )}
-
-        <div className="opportunity-date">
-          Surfaced {new Date(opportunity.posted_at).toLocaleDateString()}
-        </div>
       </div>
     </article>
   );

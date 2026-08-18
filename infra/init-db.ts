@@ -56,6 +56,20 @@ async function run() {
     await client.query(migrateSql);
     console.log("Migration extensions applied successfully!");
 
+    // 1c. Run migrate-opportunity-tracking.sql
+    console.log("Reading migrate-opportunity-tracking.sql...");
+    const trackingSql = fs.readFileSync(path.join(__dirname, 'migrate-opportunity-tracking.sql'), 'utf8');
+    console.log("Executing migrate-opportunity-tracking.sql...");
+    await client.query(trackingSql);
+    console.log("Opportunity tracking migration applied successfully!");
+
+    // 1d. Run migrate-job-dismissals.sql
+    console.log("Reading migrate-job-dismissals.sql...");
+    const dismissalsSql = fs.readFileSync(path.join(__dirname, 'migrate-job-dismissals.sql'), 'utf8');
+    console.log("Executing migrate-job-dismissals.sql...");
+    await client.query(dismissalsSql);
+    console.log("Job dismissals migration applied successfully!");
+
     // 2. Run seed_colleges.sql
     console.log("Reading seed_colleges.sql...");
     const seedCollegesSql = fs.readFileSync(path.join(__dirname, 'seed_colleges.sql'), 'utf8');

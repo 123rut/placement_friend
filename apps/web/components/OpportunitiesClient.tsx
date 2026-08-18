@@ -2,7 +2,8 @@
 
 import React, { useMemo, useState } from "react";
 import useSWR from "swr";
-import OpportunityCard from "./OpportunityCard";
+import OpportunityCard, { OpportunityStatus } from "./OpportunityCard";
+import MatchedJobCard, { MatchedJobData } from "./MatchedJobCard";
 
 interface Student {
   id: string;
@@ -17,19 +18,6 @@ interface OpportunitiesClientProps {
   student: Student;
 }
 
-interface MatchedJobCard {
-  id: string;
-  job_id: string;
-  title: string;
-  url: string;
-  location: string | null;
-  company_name: string;
-  match_score: number | null;
-  explanation: string | null;
-  strengths: string[] | null;
-  missing_skills: string[] | null;
-}
-
 interface WatchlistOpportunity {
   id: string;
   company_name: string;
@@ -40,9 +28,16 @@ interface WatchlistOpportunity {
   deadline: string | null;
   apply_url: string;
   posted_at: string;
+  status?: OpportunityStatus;
+  viewed_at?: string | null;
+  applied_at?: string | null;
 }
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+const isSeniorRole = (title: string): boolean => {
+  return /\b(senior|sr\.?|lead|staff|principal|manager|architect|director|head|vp|executive)\b/i.test(title);
+};
 
 export default function OpportunitiesClient({ student }: OpportunitiesClientProps) {
   // SWR fetches
@@ -58,7 +53,7 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
     { revalidateOnFocus: false }
   );
 
-  const matchedJobs: MatchedJobCard[] = useMemo(
+  const matchedJobs: MatchedJobData[] = useMemo(
     () => (Array.isArray(matchedJobsData) ? matchedJobsData : []),
     [matchedJobsData],
   );
@@ -71,6 +66,10 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
 
   // Filter States
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "not_viewed" | "viewed" | "applied">("all");
+
+  const isStudent = student.batch_year >= 2025 && student.batch_year <= 2028;
+  const [hideSeniorRoles, setHideSeniorRoles] = useState<boolean>(isStudent);
 
   React.useEffect(() => {
     if (typeof window !== "undefined") {
@@ -87,47 +86,10 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
 
   const studentCgpa = parseFloat(student.cgpa) || 0;
 
-  // Pagination states
-  const [matchPage, setMatchPage] = useState(0);
-  const [oppPage, setOppPage] = useState(0);
-  const ITEMS_PER_PAGE = 6; // Fits neatly in 2-column or 3-column layouts
-
-
-  // Handle Match Score filtering + Search
-  const filteredMatches = useMemo(() => {
-    return matchedJobs.filter((job) => {
-      // 1. Search term match
-      const query = search.toLowerCase();
-      const matchesSearch =
-        job.title.toLowerCase().includes(query) ||
-        job.company_name.toLowerCase().includes(query) ||
-        (job.explanation && job.explanation.toLowerCase().includes(query));
-
-      if (!matchesSearch) return false;
-
-      // 2. Score match
-      if (minMatchScore !== "all") {
-        if (job.match_score === null || job.match_score < minMatchScore) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [matchedJobs, search, minMatchScore]);
-
-  // Handle watchlist opportunities eligibility check + search
-  const filteredOpps = useMemo(() => {
+  // Eligible watchlist opportunities (respecting CGPA, Branch, and Student Seniority filters)
+  const eligibleWatchlistOpps = useMemo(() => {
     return watchlistOpps.filter((opp) => {
-      // 1. Search term match
-      const query = search.toLowerCase();
-      const matchesSearch =
-        opp.role.toLowerCase().includes(query) ||
-        opp.company_name.toLowerCase().includes(query);
-
-      if (!matchesSearch) return false;
-
-      // 2. Eligibility filter (CGPA + Branch)
+      // 1. Eligibility filter (CGPA + Branch)
       if (onlyEligible) {
         const cgpaEligible = opp.min_cgpa === null || studentCgpa >= opp.min_cgpa;
         const branchEligible =
@@ -139,18 +101,117 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
         }
       }
 
+      // 2. Hide Senior Roles for Early Career / Students
+      if (hideSeniorRoles && isSeniorRole(opp.role)) {
+        return false;
+      }
+
       return true;
     });
-  }, [watchlistOpps, search, onlyEligible, studentCgpa, student.branch]);
+  }, [watchlistOpps, onlyEligible, studentCgpa, student.branch, hideSeniorRoles]);
+
+  // Status counts across eligible watchlist opportunities
+  const counts = useMemo(() => {
+    let all = 0;
+    let notViewed = 0;
+    let viewed = 0;
+    let applied = 0;
+
+    for (const opp of eligibleWatchlistOpps) {
+      all++;
+      const st = opp.status || "NOT_VIEWED";
+      if (st === "APPLIED") {
+        applied++;
+      } else if (st === "VIEWED") {
+        viewed++;
+      } else {
+        notViewed++;
+      }
+    }
+
+    return { all, notViewed, viewed, applied };
+  }, [eligibleWatchlistOpps]);
+
+  // Pagination states
+  const [matchPage, setMatchPage] = useState(0);
+  const [oppPage, setOppPage] = useState(0);
+  const ITEMS_PER_PAGE = 6;
+
+  // Handle Match Score filtering + Search + Status
+  const filteredMatches = useMemo(() => {
+    return matchedJobs.filter((job) => {
+      // 1. Status Filter
+      const currentStatus = job.status || "NOT_VIEWED";
+      if (statusFilter === "not_viewed" && currentStatus !== "NOT_VIEWED") {
+        return false;
+      }
+      if (statusFilter === "viewed" && currentStatus !== "VIEWED") {
+        return false;
+      }
+      if (statusFilter === "applied" && currentStatus !== "APPLIED") {
+        return false;
+      }
+
+      // 2. Search term match
+      const query = search.toLowerCase();
+      const matchesSearch =
+        job.title.toLowerCase().includes(query) ||
+        job.company_name.toLowerCase().includes(query) ||
+        (job.explanation && job.explanation.toLowerCase().includes(query));
+
+      if (!matchesSearch) return false;
+
+      // 3. Score match
+      if (minMatchScore !== "all") {
+        if (job.match_score === null || job.match_score < minMatchScore) {
+          return false;
+        }
+      }
+
+      // 4. Hide senior roles if toggled
+      if (hideSeniorRoles && isSeniorRole(job.title)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [matchedJobs, search, minMatchScore, hideSeniorRoles, statusFilter]);
+
+  // Handle watchlist opportunities search + status filter
+  const filteredOpps = useMemo(() => {
+    return eligibleWatchlistOpps.filter((opp) => {
+      // 1. Status Filter
+      const currentStatus = opp.status || "NOT_VIEWED";
+      if (statusFilter === "not_viewed" && currentStatus !== "NOT_VIEWED") {
+        return false;
+      }
+      if (statusFilter === "viewed" && currentStatus !== "VIEWED") {
+        return false;
+      }
+      if (statusFilter === "applied" && currentStatus !== "APPLIED") {
+        return false;
+      }
+
+      // 2. Search term match
+      const query = search.toLowerCase();
+      const matchesSearch =
+        opp.role.toLowerCase().includes(query) ||
+        opp.company_name.toLowerCase().includes(query);
+
+      if (!matchesSearch) return false;
+
+      return true;
+    });
+  }, [eligibleWatchlistOpps, statusFilter, search]);
 
   // Reset page numbers when search query or filter changes
   React.useEffect(() => {
     setMatchPage(0);
-  }, [search, minMatchScore]);
+  }, [search, minMatchScore, hideSeniorRoles, statusFilter]);
 
   React.useEffect(() => {
     setOppPage(0);
-  }, [search]);
+  }, [search, statusFilter, hideSeniorRoles]);
 
   // Paginate sliced lists
   const paginatedMatches = useMemo(() => {
@@ -164,6 +225,73 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
   const totalMatchPages = Math.ceil(filteredMatches.length / ITEMS_PER_PAGE);
   const totalOppPages = Math.ceil(filteredOpps.length / ITEMS_PER_PAGE);
 
+  const handleOpportunityStatusChange = (jobId: string, newStatus: OpportunityStatus, appliedAt?: string) => {
+    const nowIso = appliedAt || new Date().toISOString();
+
+    // Mutate watchlist opps
+    mutateOpps(
+      (current: any) => {
+        if (!current?.data) return current;
+        return {
+          ...current,
+          data: current.data.map((item: WatchlistOpportunity) => {
+            if (item.id === jobId) {
+              return {
+                ...item,
+                status: newStatus,
+                viewed_at: item.viewed_at || nowIso,
+                applied_at: newStatus === "APPLIED" ? nowIso : item.applied_at,
+              };
+            }
+            return item;
+          }),
+        };
+      },
+      false
+    );
+
+    // Mutate matched jobs
+    mutateMatches(
+      (current: any) => {
+        if (!Array.isArray(current)) return current;
+        return current.map((item: MatchedJobData) => {
+          if (item.id === jobId || item.job_id === jobId) {
+            return {
+              ...item,
+              status: newStatus,
+              viewed_at: item.viewed_at || nowIso,
+              applied_at: newStatus === "APPLIED" ? nowIso : item.applied_at,
+            };
+          }
+          return item;
+        });
+      },
+      false
+    );
+  };
+
+  const handleDismiss = (jobId: string) => {
+    // Optimistically remove from watchlist openings
+    mutateOpps(
+      (current: any) => {
+        if (!current?.data) return current;
+        return {
+          ...current,
+          data: current.data.filter((item: WatchlistOpportunity) => item.id !== jobId),
+        };
+      },
+      false
+    );
+
+    // Optimistically remove from matched jobs
+    mutateMatches(
+      (current: any) => {
+        if (!Array.isArray(current)) return current;
+        return current.filter((item: MatchedJobData) => item.id !== jobId && item.job_id !== jobId);
+      },
+      false
+    );
+  };
 
   const handleRefresh = async () => {
     await Promise.all([mutateMatches(), mutateOpps()]);
@@ -191,7 +319,7 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
       </div>
 
       {/* Filters Toolbar Panel */}
-      <section className="panel" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px", alignItems: "center" }}>
+      <section className="panel" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", alignItems: "center" }}>
         {/* Search */}
         <div className="field">
           <span>Search listings</span>
@@ -213,6 +341,32 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
             <option value="50">Medium fit (50%+)</option>
           </select>
         </div>
+
+        {/* Seniority Filter Toggle */}
+        <div className="field" style={{ justifyContent: "flex-end" }}>
+          <span>Career Stage Mode</span>
+          <button
+            type="button"
+            onClick={() => setHideSeniorRoles(prev => !prev)}
+            className={`filter-chip ${hideSeniorRoles ? "active" : ""}`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "8px 14px",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+              width: "fit-content",
+              border: hideSeniorRoles ? "1px solid var(--accent, #10b981)" : "1px solid var(--border)",
+              background: hideSeniorRoles ? "rgba(16, 185, 129, 0.12)" : "transparent",
+              color: hideSeniorRoles ? "var(--accent, #10b981)" : "var(--muted)",
+            }}
+          >
+            {hideSeniorRoles ? "🎓 Early Career Only (Senior Roles Hidden)" : "🌐 All Roles (Including Senior/Lead)"}
+          </button>
+        </div>
       </section>
 
       {/* Main Feeds Grid */}
@@ -226,9 +380,11 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
         <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
           {/* Section 1: AI Matched Roles Shortlist */}
           <div>
-            <div style={{ marginBottom: "16px" }}>
-              <span className="topbar-kicker">AI Rank Shortlist</span>
-              <h2 style={{ margin: "4px 0 0", fontSize: "1.35rem", fontWeight: 700 }}>Resume-Matched Recommendations</h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
+              <div>
+                <span className="topbar-kicker">AI Rank Shortlist</span>
+                <h2 style={{ margin: "4px 0 0", fontSize: "1.35rem", fontWeight: 700 }}>Resume-Matched Recommendations</h2>
+              </div>
             </div>
 
             {filteredMatches.length === 0 ? (
@@ -242,52 +398,12 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
               <>
                 <div className="opportunity-grid">
                   {paginatedMatches.map((job) => (
-                    <article className="panel opportunity-card matched-job-card" key={job.id || job.job_id} style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                      <div>
-                        <div className="opportunity-topline">
-                          <div>
-                            <span className="section-label accent-label">{job.company_name}</span>
-                            <h3 className="opportunity-title">{job.title}</h3>
-                          </div>
-                          <span className="status-good" style={{ padding: "4px 10px", fontSize: "0.8rem" }}>
-                            {job.match_score === null ? "Matched" : `${Math.round(job.match_score)}% match`}
-                          </span>
-                        </div>
-
-                        <p className="panel-note" style={{ marginTop: "12px", color: "var(--text)", fontSize: "0.88rem" }}>
-                          {job.explanation || "Calculated fit score matches candidate profile."}
-                        </p>
-
-                        <div className="opportunity-metadata" style={{ marginTop: "16px" }}>
-                          <div className="meta-row">
-                            <span>Location</span>
-                            <strong>{job.location || "Not listed"}</strong>
-                          </div>
-                          <div className="meta-row">
-                            <span>Strengths</span>
-                            <strong title={(job.strengths || []).join(", ")} style={{ color: "var(--good)" }}>
-                              {job.strengths && job.strengths.length > 0
-                                ? job.strengths.slice(0, 2).join(", ")
-                                : "Profile aligned"}
-                            </strong>
-                          </div>
-                          <div className="meta-row">
-                            <span>Gaps</span>
-                            <strong title={(job.missing_skills || []).join(", ")} style={{ color: job.missing_skills && job.missing_skills.length > 0 ? "var(--warn)" : "var(--muted)" }}>
-                              {job.missing_skills && job.missing_skills.length > 0
-                                ? job.missing_skills.slice(0, 2).join(", ")
-                                : "No major gaps"}
-                            </strong>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="opportunity-footer" style={{ marginTop: "18px" }}>
-                        <a href={job.url} target="_blank" rel="noopener noreferrer" className="primary-link" style={{ width: "100%", justifyContent: "center" }}>
-                          Open Role
-                        </a>
-                      </div>
-                    </article>
+                    <MatchedJobCard
+                      key={job.id || job.job_id}
+                      job={job}
+                      onStatusChange={handleOpportunityStatusChange}
+                      onDismiss={handleDismiss}
+                    />
                   ))}
                 </div>
 
@@ -321,9 +437,43 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
 
           {/* Section 2: Surfaced watchlist openings */}
           <div>
-            <div style={{ marginBottom: "16px" }}>
-              <span className="topbar-kicker">Employer watch feed</span>
-              <h2 style={{ margin: "4px 0 0", fontSize: "1.35rem", fontWeight: 700 }}>All Watchlist Openings</h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
+              <div>
+                <span className="topbar-kicker">Employer watch feed</span>
+                <h2 style={{ margin: "4px 0 0", fontSize: "1.35rem", fontWeight: 700 }}>All Watchlist Openings</h2>
+              </div>
+
+              {/* Status Filter Chips */}
+              <div className="filter-row" style={{ alignItems: "center" }}>
+                <button
+                  type="button"
+                  className={`filter-chip ${statusFilter === "all" ? "active" : ""}`}
+                  onClick={() => setStatusFilter("all")}
+                >
+                  All ({counts.all})
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip ${statusFilter === "not_viewed" ? "active" : ""}`}
+                  onClick={() => setStatusFilter("not_viewed")}
+                >
+                  ○ Not Viewed ({counts.notViewed})
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip ${statusFilter === "viewed" ? "active" : ""}`}
+                  onClick={() => setStatusFilter("viewed")}
+                >
+                  👁 Viewed ({counts.viewed})
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip ${statusFilter === "applied" ? "active" : ""}`}
+                  onClick={() => setStatusFilter("applied")}
+                >
+                  ✓ Applied ({counts.applied})
+                </button>
+              </div>
             </div>
 
             {filteredOpps.length === 0 ? (
@@ -337,7 +487,12 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
               <>
                 <div className="opportunity-grid">
                   {paginatedOpps.map((opp) => (
-                    <OpportunityCard key={opp.id} opportunity={opp as any} />
+                    <OpportunityCard
+                      key={opp.id}
+                      opportunity={opp}
+                      onStatusChange={handleOpportunityStatusChange}
+                      onDismiss={handleDismiss}
+                    />
                   ))}
                 </div>
 

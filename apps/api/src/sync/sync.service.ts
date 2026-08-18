@@ -3,6 +3,9 @@ import { Pool } from "pg";
 import { SyncResult } from "../careerpilot.types";
 import { DB_POOL } from "../db/db.module";
 import { JobsService } from "../jobs/jobs.service";
+import { JobRelevanceValidator } from "../classifier/job-relevance-validator";
+import { LogicalJobKey } from "../classifier/logical-job-key";
+import { SectionParser } from "../classifier/section-parser";
 
 interface NormalizedJob {
   source: string;
@@ -326,6 +329,10 @@ export class SyncService {
   ): Promise<{ total: number; newCount: number }> {
     if (jobs.length === 0) return { total: 0, newCount: 0 };
     let newCount = 0;
+    let sectionsExtracted = 0;
+    let sectionsNotExtracted = 0;
+    let approvedCount = 0;
+    let rejectedCount = 0;
     const syncedJobIds: string[] = [];
     const client = await this.pool.connect();
     try {
@@ -340,35 +347,65 @@ export class SyncService {
       for (const job of jobs) {
         if (!job.source || !job.company || !job.jobId) continue;
 
-        // Skip job syncing if candidate fails the compulsory requirements of the role
-        if (studentProfile || studentRecord) {
-          const eligibility = this.checkJobEligibility(job, studentProfile, studentRecord);
-          if (!eligibility.eligible) {
-            console.log(`[Sync Skip] Skipping job "${job.title}" at company ${companyId}: ${eligibility.reason}`);
-            continue;
-          }
+        // Run Job Relevance & Experience Validation
+        const evaluation = await JobRelevanceValidator.evaluateJob(
+          {
+            title: job.title,
+            description: job.description,
+            company: job.company,
+            location: job.location,
+            category: job.employmentType,
+          },
+          { allowLlmFallback: true },
+        );
+
+        if (evaluation.hasStructuredSections) {
+          sectionsExtracted++;
+        } else {
+          sectionsNotExtracted++;
         }
 
-        console.log(`[Sync] ✅ Eligible: "${job.title}" (${job.employmentType}) — ${job.location || "Remote/Unknown"}`);
+        if (evaluation.status === "APPROVED") {
+          approvedCount++;
+        } else {
+          rejectedCount++;
+        }
+
+        console.log(evaluation.logSummary);
+
+        const logicalKey = LogicalJobKey.generate(
+          companyId,
+          job.title,
+          job.location,
+          job.employmentType,
+        );
 
         const existingJob = existingMap.get(this.jobIdentityKey(job.source, job.company, job.jobId));
         let embeddingParam: string | null = null;
 
-        if (
-          existingJob &&
-          existingJob.embedding &&
-          existingJob.title === job.title &&
-          existingJob.description === job.description
-        ) {
-          embeddingParam = existingJob.embedding;
-        } else {
-          const embedding = await this.generateEmbedding(`${job.title}\n${job.location || ""}\n${job.description}`);
-          embeddingParam = embedding ? `[${embedding.join(",")}]` : null;
+        // Only compute Gemini vector embeddings for APPROVED jobs to save latency & quota
+        if (evaluation.status === "APPROVED") {
+          if (
+            existingJob &&
+            existingJob.embedding &&
+            existingJob.title === job.title &&
+            existingJob.description === job.description
+          ) {
+            embeddingParam = existingJob.embedding;
+          } else {
+            const embedding = await this.generateEmbedding(`${job.title}\n${job.location || ""}\n${job.description}`);
+            embeddingParam = embedding ? `[${embedding.join(",")}]` : null;
+          }
         }
 
         const res = await client.query(
-          `INSERT INTO jobs (company_id, source, company, job_id, title, location, remote, employment_type, description, salary_min, salary_max, url, job_number, posted_at, embedding, last_synced)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::vector,NOW())
+          `INSERT INTO jobs (
+             company_id, source, company, job_id, title, location, remote,
+             employment_type, description, salary_min, salary_max, url,
+             job_number, posted_at, embedding, relevance_status,
+             rejection_reason, logical_job_key, last_synced
+           )
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::vector,$16,$17,$18,NOW())
            ON CONFLICT (source, company, job_id) DO UPDATE SET
              company_id=EXCLUDED.company_id,
              title=EXCLUDED.title, description=EXCLUDED.description, location=EXCLUDED.location,
@@ -376,29 +413,57 @@ export class SyncService {
              salary_min=EXCLUDED.salary_min, salary_max=EXCLUDED.salary_max,
              url=EXCLUDED.url,
              job_number=EXCLUDED.job_number,
-             embedding=COALESCE(EXCLUDED.embedding, jobs.embedding), last_synced=NOW()
+             embedding=COALESCE(EXCLUDED.embedding, jobs.embedding),
+             relevance_status=EXCLUDED.relevance_status,
+             rejection_reason=EXCLUDED.rejection_reason,
+             logical_job_key=EXCLUDED.logical_job_key,
+             last_synced=NOW()
            RETURNING id, (xmax = 0) AS is_new`,
-          [companyId, job.source, job.company, job.jobId, job.title, job.location, job.remote, job.employmentType, job.description, job.salaryMin, job.salaryMax, job.url, job.jobNumber, job.postedAt, embeddingParam]
+          [
+            companyId,
+            job.source,
+            job.company,
+            job.jobId,
+            job.title,
+            job.location,
+            job.remote,
+            job.employmentType,
+            job.description,
+            job.salaryMin,
+            job.salaryMax,
+            job.url,
+            job.jobNumber,
+            job.postedAt,
+            embeddingParam,
+            evaluation.status,
+            evaluation.rejectionReason,
+            logicalKey,
+          ]
         );
         const jobId = res.rows[0]?.id;
         const isNew = res.rows[0]?.is_new;
-        if (jobId) {
+        if (jobId && evaluation.status === "APPROVED") {
           syncedJobIds.push(jobId);
         }
         if (isNew) {
           newCount++;
-          console.log(`[Sync] 🆕 New job saved: "${job.title}"`);
-        } else {
-          console.log(`[Sync] 🔄 Updated job: "${job.title}"`);
         }
       }
       await client.query("COMMIT");
     } catch (e) { await client.query("ROLLBACK"); throw e; }
     finally { client.release(); }
 
+    const totalProcessed = sectionsExtracted + sectionsNotExtracted;
+    const contextRate = totalProcessed > 0 ? (sectionsExtracted / totalProcessed) : 1.0;
+    console.log(`[Sync Metrics] Processed: ${jobs.length} | Approved: ${approvedCount} | Rejected: ${rejectedCount} | Context Extraction Rate: ${(contextRate * 100).toFixed(1)}%`);
+
+    if (contextRate < 0.80 && totalProcessed >= 5) {
+      console.warn(`[Sync Metrics Alert] ⚠️ Context extraction rate below 80% (${(contextRate * 100).toFixed(1)}%) for company ${companyId}`);
+    }
+
     // Match and score jobs after transaction commits (failure isolated)
     if (userId && syncedJobIds.length > 0) {
-      console.log(`[Sync Auto-Match] Auto-scoring ${syncedJobIds.length} eligible jobs for user ${userId}...`);
+      console.log(`[Sync Auto-Match] Auto-scoring ${syncedJobIds.length} eligible approved jobs for user ${userId}...`);
       for (const jobId of syncedJobIds) {
         try {
           await this.jobsService.matchJobToProfile(jobId, userId, { fast: true });

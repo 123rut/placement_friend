@@ -210,12 +210,12 @@ export class AgentService {
     try {
       for (let iteration = 0; iteration < 5; iteration += 1) {
         const body = JSON.stringify({
-          model: "llama-3.3-70b-versatile",
+          model: "openai/gpt-oss-120b",
           messages: groqMessages,
           tools: this.getToolDefinitions(),
           tool_choice: "auto",
           temperature: 0.2,
-          max_tokens: 1800,
+          max_tokens: 1200,
         });
 
         const response = await fetchGroqWithRotation(body, AbortSignal.timeout(30000));
@@ -366,7 +366,7 @@ export class AgentService {
       ];
 
       const body = JSON.stringify({
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
         messages: finalMessages,
         temperature: 0.2,
         max_tokens: 1200,

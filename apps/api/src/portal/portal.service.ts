@@ -32,7 +32,7 @@ export class PortalService {
       return { data: [] };
     }
 
-    // Fetch jobs for tracked companies
+    // Fetch jobs for tracked companies with user-specific tracking status (excluding dismissed jobs)
     const jobsRes = await this.pool.query(
       `SELECT j.id,
               j.company_id,
@@ -43,12 +43,22 @@ export class PortalService {
               j.location,
               c.name as company_name,
               c.min_cgpa,
-              c.eligible_branches
+              c.eligible_branches,
+              COALESCE(ot.status, 'NOT_VIEWED') AS status,
+              ot.viewed_at,
+              ot.applied_at
        FROM jobs j
        JOIN companies c ON j.company_id = c.id
+       LEFT JOIN opportunity_tracking ot ON ot.job_id = j.id AND ot.student_id = $2
+       LEFT JOIN student_job_dismissals sjd ON sjd.student_id = $2 AND (
+         sjd.job_id = j.id OR
+         (j.logical_job_key IS NOT NULL AND sjd.logical_job_key = j.logical_job_key)
+       )
        WHERE j.company_id = ANY($1::text[])
+         AND (j.relevance_status = 'APPROVED' OR j.relevance_status IS NULL)
+         AND sjd.id IS NULL
        ORDER BY j.created_at DESC`,
-      [trackedCompanyIds]
+      [trackedCompanyIds, studentId]
     );
 
     const matchedOpportunities: any[] = [];
@@ -66,11 +76,152 @@ export class PortalService {
         allowed_branches: allowedBranches,
         deadline: null,
         apply_url: job.apply_url,
-        posted_at: job.posted_at
+        posted_at: job.posted_at,
+        status: job.status || "NOT_VIEWED",
+        viewed_at: job.viewed_at ? new Date(job.viewed_at).toISOString() : null,
+        applied_at: job.applied_at ? new Date(job.applied_at).toISOString() : null,
       });
     }
 
     return { data: matchedOpportunities };
+  }
+
+  async markOpportunityViewed(jobId: string, studentId: string) {
+    const studentRes = await this.pool.query(
+      "SELECT id FROM students WHERE id = $1",
+      [studentId]
+    );
+    if (studentRes.rows.length === 0) {
+      throw new HttpException("Student profile not found", HttpStatus.NOT_FOUND);
+    }
+
+    const jobRes = await this.pool.query(
+      "SELECT id FROM jobs WHERE id = $1",
+      [jobId]
+    );
+    if (jobRes.rows.length === 0) {
+      throw new HttpException("Opportunity not found", HttpStatus.NOT_FOUND);
+    }
+
+    const res = await this.pool.query(
+      `INSERT INTO opportunity_tracking (student_id, job_id, status, viewed_at, created_at, updated_at)
+       VALUES ($1, $2, 'VIEWED', NOW(), NOW(), NOW())
+       ON CONFLICT (student_id, job_id)
+       DO UPDATE SET
+         status = CASE WHEN opportunity_tracking.status = 'APPLIED' THEN 'APPLIED' ELSE 'VIEWED' END,
+         viewed_at = COALESCE(opportunity_tracking.viewed_at, NOW()),
+         updated_at = NOW()
+       RETURNING *`,
+      [studentId, jobId]
+    );
+
+    return {
+      success: true,
+      data: {
+        id: res.rows[0].id,
+        job_id: res.rows[0].job_id,
+        student_id: res.rows[0].student_id,
+        status: res.rows[0].status,
+        viewed_at: res.rows[0].viewed_at,
+        applied_at: res.rows[0].applied_at,
+      }
+    };
+  }
+
+  async markOpportunityApplied(jobId: string, studentId: string) {
+    const studentRes = await this.pool.query(
+      "SELECT id FROM students WHERE id = $1",
+      [studentId]
+    );
+    if (studentRes.rows.length === 0) {
+      throw new HttpException("Student profile not found", HttpStatus.NOT_FOUND);
+    }
+
+    const jobRes = await this.pool.query(
+      "SELECT id FROM jobs WHERE id = $1",
+      [jobId]
+    );
+    if (jobRes.rows.length === 0) {
+      throw new HttpException("Opportunity not found", HttpStatus.NOT_FOUND);
+    }
+
+    const res = await this.pool.query(
+      `INSERT INTO opportunity_tracking (student_id, job_id, status, viewed_at, applied_at, created_at, updated_at)
+       VALUES ($1, $2, 'APPLIED', NOW(), NOW(), NOW(), NOW())
+       ON CONFLICT (student_id, job_id)
+       DO UPDATE SET
+         status = 'APPLIED',
+         applied_at = COALESCE(opportunity_tracking.applied_at, NOW()),
+         viewed_at = COALESCE(opportunity_tracking.viewed_at, NOW()),
+         updated_at = NOW()
+       RETURNING *`,
+      [studentId, jobId]
+    );
+
+    return {
+      success: true,
+      data: {
+        id: res.rows[0].id,
+        job_id: res.rows[0].job_id,
+        student_id: res.rows[0].student_id,
+        status: res.rows[0].status,
+        viewed_at: res.rows[0].viewed_at,
+        applied_at: res.rows[0].applied_at,
+      }
+    };
+  }
+
+  async dismissOpportunity(jobId: string, studentId: string) {
+    if (!studentId) {
+      throw new HttpException("Student ID is required", HttpStatus.BAD_REQUEST);
+    }
+
+    const jobRes = await this.pool.query(
+      "SELECT id, logical_job_key FROM jobs WHERE id = $1",
+      [jobId]
+    );
+    if (jobRes.rows.length === 0) {
+      throw new HttpException("Opportunity not found", HttpStatus.NOT_FOUND);
+    }
+
+    const logicalKey = jobRes.rows[0].logical_job_key || null;
+
+    await this.pool.query(
+      `INSERT INTO student_job_dismissals (student_id, job_id, logical_job_key, dismissed_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (student_id, job_id) DO NOTHING`,
+      [studentId, jobId, logicalKey]
+    );
+
+    return { success: true, message: "Opportunity dismissed successfully." };
+  }
+
+  async restoreOpportunity(jobId: string, studentId: string) {
+    if (!studentId) {
+      throw new HttpException("Student ID is required", HttpStatus.BAD_REQUEST);
+    }
+
+    const jobRes = await this.pool.query(
+      "SELECT id, logical_job_key FROM jobs WHERE id = $1",
+      [jobId]
+    );
+    const logicalKey = jobRes.rows[0]?.logical_job_key;
+
+    if (logicalKey) {
+      await this.pool.query(
+        `DELETE FROM student_job_dismissals
+         WHERE student_id = $1 AND (job_id = $2 OR logical_job_key = $3)`,
+        [studentId, jobId, logicalKey]
+      );
+    } else {
+      await this.pool.query(
+        `DELETE FROM student_job_dismissals
+         WHERE student_id = $1 AND job_id = $2`,
+        [studentId, jobId]
+      );
+    }
+
+    return { success: true, message: "Opportunity restored successfully." };
   }
 
   // 2. Notifications Endpoints
