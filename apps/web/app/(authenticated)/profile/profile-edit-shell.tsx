@@ -10,6 +10,7 @@ import { branchOptions } from "../../../lib/sprint-one";
 type ProfileEditShellProps = {
   user: User;
   profile: any;
+  initialCandidateProfile?: any;
   colleges?: College[];
   companies: Company[];
   initialSelectedCompanyIds: string[];
@@ -22,6 +23,7 @@ const batchYearOptions = Array.from({ length: maxYear - 2000 + 1 }, (_, i) => 20
 export function ProfileEditShell({
   user,
   profile: initialProfile,
+  initialCandidateProfile,
   colleges = [],
 }: ProfileEditShellProps) {
   const supabase = useMemo(() => createClient(), []);
@@ -57,38 +59,39 @@ export function ProfileEditShell({
   }, [customInstitutionName, selectedCollegeId, colleges, autoDetectedCollege]);
 
   // -------------------------------------------------------------
-  // Resume & Candidate Profile State (from Nest / candidate_profiles)
+  // Resume & Candidate Profile State (from database / candidate_profiles)
   // -------------------------------------------------------------
-  const [skills, setSkills] = useState<string[]>([
-    "Python",
-    "Java",
-    "C++",
-    "JavaScript",
-    "React",
-    "Next.js",
-    "Node.js",
-    "PostgreSQL",
-    "MongoDB",
-    "Git",
-    "Docker",
-    "AWS",
-    "Machine Learning",
-    "Data Structures & Algorithms",
-    "System Design",
-  ]);
+  const [skills, setSkills] = useState<string[]>(
+    Array.isArray(initialCandidateProfile?.skills) ? initialCandidateProfile.skills : []
+  );
 
-  const [experiences, setExperiences] = useState<any[]>([]);
-  const [preferredRoles, setPreferredRoles] = useState<string[]>(["Software Engineer", "SDE Intern"]);
-  const [preferredLocations, setPreferredLocations] = useState<string[]>(["Pune", "Bengaluru", "Remote"]);
-  const [preferredIndustries, setPreferredIndustries] = useState<string[]>(["IT Services", "Product", "Startup"]);
+  const [experiences, setExperiences] = useState<any[]>(
+    Array.isArray(initialCandidateProfile?.experience) ? initialCandidateProfile.experience : []
+  );
+  const [preferredRoles, setPreferredRoles] = useState<string[]>(
+    Array.isArray(initialCandidateProfile?.preferred_roles) && initialCandidateProfile.preferred_roles.length > 0
+      ? initialCandidateProfile.preferred_roles
+      : []
+  );
+  const [preferredLocations, setPreferredLocations] = useState<string[]>(
+    Array.isArray(initialCandidateProfile?.preferred_locations)
+      ? initialCandidateProfile.preferred_locations
+      : initialCandidateProfile?.preferred_location
+      ? [initialCandidateProfile.preferred_location]
+      : []
+  );
+  const [preferredIndustries, setPreferredIndustries] = useState<string[]>(
+    Array.isArray(initialCandidateProfile?.preferred_industries) ? initialCandidateProfile.preferred_industries : []
+  );
   const [expectedCtc, setExpectedCtc] = useState<string>("12 – 20 LPA");
   const [willingToRelocate, setWillingToRelocate] = useState<string>("Yes");
 
   const [socialLinks, setSocialLinks] = useState<{ linkedin?: string; github?: string; portfolio?: string }>({
-    linkedin: "",
-    github: "",
-    portfolio: "",
+    linkedin: initialCandidateProfile?.personal?.linkedin || "",
+    github: initialCandidateProfile?.personal?.github || "",
+    portfolio: initialCandidateProfile?.personal?.portfolio || initialCandidateProfile?.personal?.website || "",
   });
+
 
   // Modal Control States
   const [activeModal, setActiveModal] = useState<"profile" | "skills" | "experience" | "preferences" | "links" | null>(null);
@@ -554,8 +557,9 @@ export function ProfileEditShell({
 
             <div style={{ marginTop: "12px" }}>
               <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>{currentInstitutionName}</h3>
-              <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "2px 0 0" }}>B.E. {branch}</p>
+              <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "2px 0 0" }}>{branch}</p>
               <div style={{ marginTop: "8px" }}>
+
                 <span
                   style={{
                     fontSize: "0.72rem",
@@ -754,25 +758,42 @@ export function ProfileEditShell({
               </button>
             </div>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {skills.map((skill) => (
-                <span
-                  key={skill}
-                  style={{
-                    fontSize: "0.8rem",
-                    fontWeight: 500,
-                    padding: "4px 12px",
-                    borderRadius: "8px",
-                    background: "rgba(255, 255, 255, 0.05)",
-                    border: "1px solid var(--line)",
-                    color: "var(--text-primary)",
-                  }}
+            {skills.length === 0 ? (
+              <div style={{ padding: "16px 8px", color: "var(--muted)", fontSize: "0.85rem", textAlign: "center" }}>
+                <p style={{ margin: "0 0 10px", fontSize: "0.82rem" }}>
+                  No skills added yet. Add your core languages, frameworks, and tools or upload your resume to auto-extract them.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveModal("skills")}
+                  className="primary-link"
+                  style={{ fontSize: "0.78rem", padding: "5px 14px", borderRadius: "8px" }}
                 >
-                  {skill}
-                </span>
-              ))}
-            </div>
+                  + Add Skills
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {skills.map((skill) => (
+                  <span
+                    key={skill}
+                    style={{
+                      fontSize: "0.8rem",
+                      fontWeight: 500,
+                      padding: "4px 12px",
+                      borderRadius: "8px",
+                      background: "rgba(255, 255, 255, 0.05)",
+                      border: "1px solid var(--line)",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            )}
           </section>
+
 
           {/* Section: Work Experience */}
           <section className="panel" style={{ padding: "20px", borderRadius: "12px" }}>
@@ -913,9 +934,10 @@ export function ProfileEditShell({
                 <strong style={{ color: "var(--text-primary)" }}>{currentInstitutionName}</strong>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255, 255, 255, 0.04)", paddingBottom: "8px" }}>
-                <span style={{ color: "var(--muted)" }}>Degree</span>
-                <strong style={{ color: "var(--text-primary)" }}>B.E. {branch}</strong>
+                <span style={{ color: "var(--muted)" }}>Branch / Stream</span>
+                <strong style={{ color: "var(--text-primary)" }}>{branch}</strong>
               </div>
+
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255, 255, 255, 0.04)", paddingBottom: "8px" }}>
                 <span style={{ color: "var(--muted)" }}>Graduation Year</span>
                 <strong style={{ color: "var(--text-primary)" }}>{batchYear}</strong>
@@ -991,132 +1013,10 @@ export function ProfileEditShell({
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* 5. ADDITIONAL INFORMATION (Social & Portfolio Links)          */}
-      {/* ------------------------------------------------------------- */}
-      <section className="panel" style={{ padding: "20px", borderRadius: "12px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
-          <div>
-            <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0, color: "var(--text-primary)" }}>
-              Additional Information
-            </h3>
-            <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>Anything else we should know?</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setActiveModal("links")}
-            className="primary-link ghost-link"
-            style={{ fontSize: "0.78rem", padding: "4px 10px" }}
-          >
-            ✏️ Edit
-          </button>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: "14px",
-          }}
-        >
-          {/* LinkedIn */}
-          <div
-            style={{
-              padding: "14px 16px",
-              borderRadius: "10px",
-              background: "rgba(255, 255, 255, 0.02)",
-              border: "1px solid var(--line)",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <span style={{ fontSize: "1.2rem" }}>🔗</span>
-              <div>
-                <strong style={{ fontSize: "0.85rem", display: "block" }}>LinkedIn</strong>
-                <span style={{ fontSize: "0.76rem", color: "var(--muted)" }}>
-                  {socialLinks.linkedin ? "Connected" : "Not added"}
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveModal("links")}
-              className="primary-link ghost-link"
-              style={{ fontSize: "0.74rem", padding: "3px 10px", minHeight: "26px" }}
-            >
-              {socialLinks.linkedin ? "Edit" : "Add"}
-            </button>
-          </div>
-
-          {/* GitHub */}
-          <div
-            style={{
-              padding: "14px 16px",
-              borderRadius: "10px",
-              background: "rgba(255, 255, 255, 0.02)",
-              border: "1px solid var(--line)",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <span style={{ fontSize: "1.2rem" }}>🐙</span>
-              <div>
-                <strong style={{ fontSize: "0.85rem", display: "block" }}>GitHub</strong>
-                <span style={{ fontSize: "0.76rem", color: "var(--muted)" }}>
-                  {socialLinks.github ? "Connected" : "Not added"}
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveModal("links")}
-              className="primary-link ghost-link"
-              style={{ fontSize: "0.74rem", padding: "3px 10px", minHeight: "26px" }}
-            >
-              {socialLinks.github ? "Edit" : "Add"}
-            </button>
-          </div>
-
-          {/* Portfolio */}
-          <div
-            style={{
-              padding: "14px 16px",
-              borderRadius: "10px",
-              background: "rgba(255, 255, 255, 0.02)",
-              border: "1px solid var(--line)",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <span style={{ fontSize: "1.2rem" }}>🌐</span>
-              <div>
-                <strong style={{ fontSize: "0.85rem", display: "block" }}>Portfolio</strong>
-                <span style={{ fontSize: "0.76rem", color: "var(--muted)" }}>
-                  {socialLinks.portfolio ? "Connected" : "Not added"}
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveModal("links")}
-              className="primary-link ghost-link"
-              style={{ fontSize: "0.74rem", padding: "3px 10px", minHeight: "26px" }}
-            >
-              {socialLinks.portfolio ? "Edit" : "Add"}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* ------------------------------------------------------------- */}
       {/* MODAL 1: EDIT PROFILE & ACADEMICS                             */}
       {/* ------------------------------------------------------------- */}
       {activeModal === "profile" && (
+
         <div
           style={{
             position: "fixed",
@@ -1649,114 +1549,7 @@ export function ProfileEditShell({
           </div>
         </div>
       )}
-
-      {/* ------------------------------------------------------------- */}
-      {/* MODAL 5: EDIT SOCIAL & PORTFOLIO LINKS                        */}
-      {/* ------------------------------------------------------------- */}
-      {activeModal === "links" && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0, 0, 0, 0.75)",
-            backdropFilter: "blur(6px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: "16px",
-          }}
-          onClick={() => setActiveModal(null)}
-        >
-          <div
-            className="panel"
-            style={{
-              maxWidth: "480px",
-              width: "100%",
-              borderRadius: "16px",
-              padding: "24px",
-              background: "var(--surface)",
-              border: "1px solid var(--line)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>Edit Links & Profiles</h3>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="danger-action-btn"
-                style={{ padding: "2px 8px", borderRadius: "6px", cursor: "pointer" }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveLinks} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div>
-                <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: "4px" }}>
-                  LinkedIn URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://linkedin.com/in/username"
-                  value={socialLinks.linkedin}
-                  onChange={(e) => setSocialLinks({ ...socialLinks, linkedin: e.target.value })}
-                  className="input-field"
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "var(--surface-alt)", border: "1px solid var(--line)", color: "inherit" }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: "4px" }}>
-                  GitHub URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://github.com/username"
-                  value={socialLinks.github}
-                  onChange={(e) => setSocialLinks({ ...socialLinks, github: e.target.value })}
-                  className="input-field"
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "var(--surface-alt)", border: "1px solid var(--line)", color: "inherit" }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: "4px" }}>
-                  Portfolio / Website URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://yourportfolio.com"
-                  value={socialLinks.portfolio}
-                  onChange={(e) => setSocialLinks({ ...socialLinks, portfolio: e.target.value })}
-                  className="input-field"
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "var(--surface-alt)", border: "1px solid var(--line)", color: "inherit" }}
-                />
-              </div>
-
-              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "10px" }}>
-                <button
-                  type="button"
-                  onClick={() => setActiveModal(null)}
-                  className="primary-link ghost-link"
-                  style={{ padding: "6px 14px" }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="primary-link"
-                  style={{ padding: "6px 18px", borderRadius: "8px", background: "var(--good)", color: "#022c22", fontWeight: 700 }}
-                >
-                  Save Links
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
+

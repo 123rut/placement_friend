@@ -68,7 +68,14 @@ export default async function ProfilePage() {
     };
   });
 
-  // 5. Query tracked companies from student_company_targets table
+  // 5. Query candidate_profiles (resume, skills, experience, preferences)
+  const { data: candidateProfile } = await adminDb
+    .from("candidate_profiles")
+    .select("*")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  // 6. Query tracked companies from student_company_targets table
   const { data: targets } = await supabase
     .from("student_company_targets")
     .select("company_id")
@@ -80,10 +87,12 @@ export default async function ProfilePage() {
     <ProfileEditShell
       user={user}
       profile={defaultStudent}
+      initialCandidateProfile={candidateProfile}
       colleges={allColleges}
       companies={mappedCompanies as any}
       initialSelectedCompanyIds={initialSelectedCompanyIds}
     />
   );
 }
+
 
