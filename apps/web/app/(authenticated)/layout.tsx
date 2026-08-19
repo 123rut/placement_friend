@@ -18,14 +18,37 @@ export default async function AuthenticatedLayout({ children }: AuthenticatedLay
     redirect("/login");
   }
 
-  const adminDb = createAdminClient();
+  // 2. Query student profile with college name using authenticated session client
+  let student: any = null;
 
-  // 2. Query student profile with college name
-  const { data: student, error } = await adminDb
+  const { data: authStudent } = await supabase
     .from("students")
     .select("*, colleges(name)")
-    .or(`id.eq.${user.id},college_email.eq.${user.email}`)
+    .eq("id", user.id)
     .maybeSingle();
+
+  student = authStudent;
+
+  if (!student && user.email) {
+    const { data: emailStudent } = await supabase
+      .from("students")
+      .select("*, colleges(name)")
+      .eq("college_email", user.email)
+      .maybeSingle();
+    student = emailStudent;
+  }
+
+  if (!student && process.env.NEXT_PRIVATE_SUPABASE_SERVICE_KEY) {
+    try {
+      const adminDb = createAdminClient();
+      const { data: adminStudent } = await adminDb
+        .from("students")
+        .select("*, colleges(name)")
+        .or(`id.eq.${user.id},college_email.eq.${user.email}`)
+        .maybeSingle();
+      if (adminStudent) student = adminStudent;
+    } catch {}
+  }
 
   const isProfileComplete = Boolean(
     student &&
@@ -39,6 +62,7 @@ export default async function AuthenticatedLayout({ children }: AuthenticatedLay
   if (!isProfileComplete && pathname && pathname !== "/profile" && !pathname.startsWith("/api")) {
     redirect("/profile");
   }
+
 
   // 3. Safe fallback profile for first-time profile creation layout view
   const defaultStudent = student

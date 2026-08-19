@@ -12,14 +12,37 @@ export default async function ProfilePage() {
     redirect("/login");
   }
 
-  const adminDb = createAdminClient();
+  // 2. Query student profile from the database using authenticated session client
+  let student: any = null;
 
-  // 2. Query student profile from the database (by id or email)
-  const { data: student } = await adminDb
+  const { data: authStudent } = await supabase
     .from("students")
     .select("*")
-    .or(`id.eq.${user.id},college_email.eq.${user.email}`)
+    .eq("id", user.id)
     .maybeSingle();
+
+  student = authStudent;
+
+  if (!student && user.email) {
+    const { data: emailStudent } = await supabase
+      .from("students")
+      .select("*")
+      .eq("college_email", user.email)
+      .maybeSingle();
+    student = emailStudent;
+  }
+
+  if (!student && process.env.NEXT_PRIVATE_SUPABASE_SERVICE_KEY) {
+    try {
+      const adminDb = createAdminClient();
+      const { data: adminStudent } = await adminDb
+        .from("students")
+        .select("*")
+        .or(`id.eq.${user.id},college_email.eq.${user.email}`)
+        .maybeSingle();
+      if (adminStudent) student = adminStudent;
+    } catch {}
+  }
 
   // If student profile does not exist yet, prepare clean default profile
   const defaultStudent = student || {
@@ -35,6 +58,7 @@ export default async function ProfilePage() {
     batch_year: 2027,
     is_new: true,
   };
+
 
 
 
@@ -72,11 +96,27 @@ export default async function ProfilePage() {
   });
 
   // 5. Query candidate_profiles (resume, skills, experience, preferences)
-  const { data: candidateProfile } = await adminDb
+  let candidateProfile: any = null;
+  const { data: authCandidateProfile } = await supabase
     .from("candidate_profiles")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
+
+  candidateProfile = authCandidateProfile;
+
+  if (!candidateProfile && process.env.NEXT_PRIVATE_SUPABASE_SERVICE_KEY) {
+    try {
+      const adminDb = createAdminClient();
+      const { data: adminCandidateProfile } = await adminDb
+        .from("candidate_profiles")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (adminCandidateProfile) candidateProfile = adminCandidateProfile;
+    } catch {}
+  }
+
 
   // 6. Query tracked companies from student_company_targets table
   const { data: targets } = await supabase
