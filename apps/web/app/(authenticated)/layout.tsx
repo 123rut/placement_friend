@@ -50,18 +50,21 @@ export default async function AuthenticatedLayout({ children }: AuthenticatedLay
     } catch {}
   }
 
+  const hasCgpa = student?.cgpa !== null && student?.cgpa !== undefined && student?.cgpa !== "";
+  const hasCollege = Boolean(student?.college_id || student?.custom_institution_name);
   const isProfileComplete = Boolean(
     student &&
-    student.full_name &&
-    student.branch &&
-    student.cgpa &&
-    (student.college_id || student.custom_institution_name)
+    student.full_name?.trim() &&
+    student.branch?.trim() &&
+    hasCgpa &&
+    hasCollege
   );
 
   // If profile is not complete, redirect to /profile
   if (!isProfileComplete && pathname && pathname !== "/profile" && !pathname.startsWith("/api")) {
     redirect("/profile");
   }
+
 
 
   // 3. Safe fallback profile for first-time profile creation layout view

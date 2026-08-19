@@ -240,17 +240,13 @@ export function ProfileEditShell({
 
       setActiveModal(null);
       setModalError(null);
-      setSaveStatus("✓ All profile changes saved successfully!");
-      router.refresh();
+      setSaveStatus("✓ All profile changes saved successfully! Redirecting to Dashboard...");
 
-      if (initialProfile?.is_new) {
-        setTimeout(() => {
-          router.push("/dashboard");
-        }, 1000);
-      } else {
-        setTimeout(() => setSaveStatus(null), 4000);
-      }
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 500);
     } catch (err: any) {
+
       console.error("Failed to save profile:", err);
       const errMsg = `Error saving: ${err.message || "Please check your connection"}`;
       setModalError(errMsg);
