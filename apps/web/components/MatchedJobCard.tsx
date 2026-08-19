@@ -15,6 +15,8 @@ export interface MatchedJobData {
   strengths: string[] | null;
   missing_skills: string[] | null;
   status?: OpportunityStatus;
+  is_saved?: boolean;
+  saved_at?: string | null;
   viewed_at?: string | null;
   applied_at?: string | null;
 }
@@ -22,19 +24,23 @@ export interface MatchedJobData {
 interface MatchedJobCardProps {
   job: MatchedJobData;
   onStatusChange?: (jobId: string, newStatus: OpportunityStatus, appliedAt?: string) => void;
+  onToggleSave?: (jobId: string, isSaved: boolean) => void;
   onDismiss?: (jobId: string) => void;
 }
 
-export default function MatchedJobCard({ job, onStatusChange, onDismiss }: MatchedJobCardProps) {
+export default function MatchedJobCard({ job, onStatusChange, onToggleSave, onDismiss }: MatchedJobCardProps) {
   const actualJobId = job.job_id || job.id;
   const [currentStatus, setCurrentStatus] = useState<OpportunityStatus>(
     job.status || "NOT_VIEWED"
   );
+  const [isSaved, setIsSaved] = useState<boolean>(!!job.is_saved);
+  const [isSaving, setIsSaving] = useState(false);
   const [appliedAtDate, setAppliedAtDate] = useState<string | null>(
     job.applied_at || null
   );
   const [markingApplied, setMarkingApplied] = useState(false);
   const [dismissing, setDismissing] = useState(false);
+
 
   const handleDismiss = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -53,10 +59,13 @@ export default function MatchedJobCard({ job, onStatusChange, onDismiss }: Match
     if (job.status) {
       setCurrentStatus(job.status);
     }
+    if (typeof job.is_saved === "boolean") {
+      setIsSaved(job.is_saved);
+    }
     if (job.applied_at) {
       setAppliedAtDate(job.applied_at);
     }
-  }, [job.status, job.applied_at]);
+  }, [job.status, job.is_saved, job.applied_at]);
 
   const handleOpenRole = () => {
     if (currentStatus === "NOT_VIEWED") {
@@ -70,8 +79,29 @@ export default function MatchedJobCard({ job, onStatusChange, onDismiss }: Match
     }
   };
 
+  const handleToggleSave = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isSaving) return;
+    const nextSaved = !isSaved;
+    setIsSaved(nextSaved);
+    onToggleSave?.(actualJobId, nextSaved);
+    setIsSaving(true);
+    try {
+      const endpoint = nextSaved
+        ? `/api/opportunities/${actualJobId}/save`
+        : `/api/opportunities/${actualJobId}/unsave`;
+      await fetch(endpoint, { method: "POST" });
+    } catch (err) {
+      console.error("Failed to toggle save:", err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleMarkApplied = async (e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (markingApplied) return;
     setMarkingApplied(true);
     const nowIso = new Date().toISOString();
@@ -93,10 +123,17 @@ export default function MatchedJobCard({ job, onStatusChange, onDismiss }: Match
     }
   };
 
+  const scoreVal = typeof job.match_score === "number" ? Math.round(job.match_score) : null;
+
   return (
     <article
       className="panel opportunity-card matched-job-card"
-      style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        borderColor: scoreVal && scoreVal >= 80 ? "rgba(16, 185, 129, 0.35)" : "var(--line)",
+      }}
     >
       <div>
         <div className="opportunity-topline">
@@ -105,24 +142,59 @@ export default function MatchedJobCard({ job, onStatusChange, onDismiss }: Match
             <h3 className="opportunity-title">{job.title}</h3>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {currentStatus === "APPLIED" ? (
-              <span className="pill status-good">✓ Applied</span>
-            ) : currentStatus === "VIEWED" ? (
-              <span className="pill status-info">👁 Viewed</span>
-            ) : (
-              <span className="pill status-gray">○ Not Viewed</span>
+            {scoreVal !== null && (
+              <span
+                className="status-good"
+                style={{
+                  padding: "3px 8px",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  background: scoreVal >= 85 ? "rgba(16, 185, 129, 0.2)" : "rgba(59, 130, 246, 0.2)",
+                  color: scoreVal >= 85 ? "var(--good)" : "#60a5fa",
+                  border: `1px solid ${scoreVal >= 85 ? "rgba(16, 185, 129, 0.4)" : "rgba(59, 130, 246, 0.4)"}`,
+                  borderRadius: "999px",
+                }}
+              >
+                🟢 {scoreVal}% Fit
+              </span>
             )}
-            <span className="status-good" style={{ padding: "4px 10px", fontSize: "0.8rem" }}>
-              {job.match_score ? `${Math.round(job.match_score)}% Fit` : "Strong Fit"}
-            </span>
+
+            {/* Bookmark Star Toggle Button */}
+            <button
+              type="button"
+              onClick={handleToggleSave}
+              disabled={isSaving}
+              title={isSaved ? "Remove from saved jobs" : "Save this job to your pipeline"}
+              style={{
+                background: isSaved ? "rgba(245, 158, 11, 0.15)" : "rgba(255, 255, 255, 0.05)",
+                border: `1px solid ${isSaved ? "rgba(245, 158, 11, 0.4)" : "var(--line)"}`,
+                color: isSaved ? "#f59e0b" : "var(--muted)",
+                borderRadius: "999px",
+                padding: "2px 8px",
+                fontSize: "0.74rem",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                fontWeight: 600,
+                transition: "all 0.15s ease",
+              }}
+            >
+              {isSaved ? "⭐ Saved" : "☆ Save"}
+            </button>
+
+            {currentStatus === "APPLIED" && (
+              <span className="pill status-good" style={{ fontSize: "0.72rem", padding: "2px 8px" }}>
+                ✓ Applied
+              </span>
+            )}
+
             <button
               type="button"
               onClick={handleDismiss}
               title="Dismiss this job from your feed"
+              className="danger-action-btn"
               style={{
-                background: "rgba(239, 68, 68, 0.08)",
-                border: "1px solid rgba(239, 68, 68, 0.25)",
-                color: "#ef4444",
                 borderRadius: "999px",
                 padding: "2px 8px",
                 fontSize: "0.72rem",
@@ -130,90 +202,162 @@ export default function MatchedJobCard({ job, onStatusChange, onDismiss }: Match
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "3px",
-                fontWeight: 500,
-                transition: "all 0.15s ease",
+                fontWeight: 600,
               }}
             >
-              ✕ Dismiss
+              ✕
             </button>
           </div>
         </div>
 
-        <p className="panel-note" style={{ marginTop: "12px", color: "var(--text)", fontSize: "0.88rem" }}>
-          {job.explanation || "Calculated fit score matches candidate profile."}
-        </p>
 
-        <div className="opportunity-metadata" style={{ marginTop: "16px" }}>
-          <div className="meta-row">
-            <span>Location</span>
-            <strong>{job.location || "Not listed"}</strong>
-          </div>
-          <div className="meta-row">
-            <span>Strengths</span>
-            <strong title={(job.strengths || []).join(", ")} style={{ color: "var(--good)" }}>
-              {job.strengths && job.strengths.length > 0
-                ? job.strengths.slice(0, 2).join(", ")
-                : "Profile aligned"}
-            </strong>
-          </div>
-          <div className="meta-row">
-            <span>Gaps</span>
-            <strong
-              title={(job.missing_skills || []).join(", ")}
-              style={{ color: job.missing_skills && job.missing_skills.length > 0 ? "var(--warn)" : "var(--muted)" }}
-            >
-              {job.missing_skills && job.missing_skills.length > 0
-                ? job.missing_skills.slice(0, 2).join(", ")
-                : "No major gaps"}
-            </strong>
-          </div>
+        {/* Location & Employment Strip */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", fontSize: "0.82rem", color: "var(--muted)", marginTop: "8px" }}>
+          <span>📍 {job.location || "Location not listed"}</span>
+          <span>•</span>
+          <span>💼 Full-time</span>
+          <span>•</span>
+          <span>🎓 Early Career</span>
+        </div>
+
+        {/* Criteria Skill Tags: Strengths & Gaps */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "14px" }}>
+          {/* Matched Strengths */}
+          {Array.isArray(job.strengths) && job.strengths.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", marginRight: "2px" }}>
+                Strengths:
+              </span>
+              {job.strengths.slice(0, 4).map((s) => (
+                <span
+                  key={s}
+                  style={{
+                    fontSize: "0.74rem",
+                    fontWeight: 600,
+                    padding: "2px 8px",
+                    borderRadius: "6px",
+                    background: "rgba(16, 185, 129, 0.1)",
+                    border: "1px solid rgba(16, 185, 129, 0.25)",
+                    color: "var(--good)",
+                  }}
+                >
+                  ✓ {s}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Gaps: Displayed if score < 90% or if specific missing skills are detected */}
+          {Array.isArray(job.missing_skills) && job.missing_skills.length > 0 ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", marginRight: "2px" }}>
+                Gaps:
+              </span>
+              {job.missing_skills.slice(0, 3).map((g) => (
+                <span
+                  key={g}
+                  style={{
+                    fontSize: "0.74rem",
+                    fontWeight: 500,
+                    padding: "2px 8px",
+                    borderRadius: "6px",
+                    background: "rgba(245, 158, 11, 0.08)",
+                    border: "1px solid rgba(245, 158, 11, 0.25)",
+                    color: "var(--warn)",
+                  }}
+                >
+                  ○ {g}
+                </span>
+              ))}
+            </div>
+          ) : scoreVal !== null && scoreVal < 90 ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", marginRight: "2px" }}>
+                Gaps:
+              </span>
+              <span
+                style={{
+                  fontSize: "0.74rem",
+                  fontWeight: 500,
+                  padding: "2px 8px",
+                  borderRadius: "6px",
+                  background: "rgba(245, 158, 11, 0.08)",
+                  border: "1px solid rgba(245, 158, 11, 0.25)",
+                  color: "var(--warn)",
+                }}
+              >
+                ○ {scoreVal < 60 ? "Specialized domain experience & depth" : scoreVal < 75 ? "Advanced domain tooling & systems" : "Project depth in production environment"}
+              </span>
+            </div>
+          ) : null}
         </div>
       </div>
 
-      <div className="opportunity-footer" style={{ marginTop: "18px" }}>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+
+
+
+      <div className="opportunity-footer" style={{ marginTop: "16px" }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           <a
             href={job.url}
             target="_blank"
             rel="noopener noreferrer"
             onClick={handleOpenRole}
             className="primary-link"
-            style={{ flex: 1, justifyContent: "center" }}
+            style={{ flex: 1, justifyContent: "center", fontSize: "0.85rem", height: "36px" }}
           >
-            {currentStatus === "APPLIED" ? "View Posting" : "Open Role"}
+            View Job →
           </a>
-          {currentStatus === "VIEWED" && (
+
+          {currentStatus !== "APPLIED" ? (
             <button
               type="button"
               onClick={handleMarkApplied}
               disabled={markingApplied}
-              className="action-btn"
-              title="Confirm you submitted an application"
+              title="Track this application in your pipeline"
               style={{
-                fontSize: "0.82rem",
-                padding: "6px 12px",
+                fontSize: "0.8rem",
+                padding: "0 12px",
+                height: "36px",
                 whiteSpace: "nowrap",
-                background: "var(--accent-soft)",
-                border: "1px solid var(--accent)",
-                color: "var(--accent)",
+                background: "rgba(255, 255, 255, 0.04)",
+                border: "1px solid var(--line)",
+                color: "var(--text-secondary)",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+                transition: "all 0.15s ease",
               }}
             >
-              {markingApplied ? "Saving..." : "✓ Mark as Applied"}
+              {markingApplied ? "Saving..." : "+ Mark Applied"}
             </button>
+          ) : (
+            <div
+              style={{
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                color: "var(--good)",
+                background: "rgba(16, 185, 129, 0.12)",
+                border: "1px solid rgba(16, 185, 129, 0.3)",
+                padding: "0 12px",
+                height: "36px",
+                borderRadius: "8px",
+                whiteSpace: "nowrap",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              ✓ Applied
+            </div>
           )}
-        </div>
 
-        {currentStatus === "APPLIED" && (
-          <div style={{ fontSize: "0.78rem", color: "var(--good)", display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
-            <span>✓ Application recorded</span>
-            {appliedAtDate && (
-              <span style={{ color: "var(--muted)" }}>
-                on {new Date(appliedAtDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-              </span>
-            )}
-          </div>
-        )}
+        </div>
       </div>
     </article>
   );
 }
+

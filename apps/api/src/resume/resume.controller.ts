@@ -58,18 +58,17 @@ export class ResumeController {
 
   /**
    * PUT /api/resume/:userId
-   * Manually update stored candidate profile experience.
+   * Manually update stored candidate profile (skills, experience, preferences, links).
    */
   @Put(":userId")
-  async updateExperience(
+  async updateProfile(
     @Param("userId") userId: string,
-    @Body("experience") experience: any[]
+    @Body() body: any
   ): Promise<CandidateProfileRecord | { error: string }> {
     if (!userId) throw new BadRequestException("userId is required");
-    if (!Array.isArray(experience)) throw new BadRequestException("experience array is required");
 
     try {
-      return await this.resumeService.updateExperience(userId, experience);
+      return await this.resumeService.updateProfile(userId, body || {});
     } catch (error) {
       throw new InternalServerErrorException(this.toResumeErrorMessage(error));
     }

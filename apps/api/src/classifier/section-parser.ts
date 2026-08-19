@@ -108,36 +108,29 @@ export class SectionParser {
       });
     }
 
-    const structuredSectionsCount = sections.filter((s) => s.type !== "GENERAL").length;
-    const hasStructuredSections = structuredSectionsCount >= 1;
+    const textByType: Record<SectionType, string[]> = {
+      REQUIREMENTS: [],
+      PREFERRED_QUALIFICATIONS: [],
+      RESPONSIBILITIES: [],
+      OVERVIEW: [],
+      GENERAL: [],
+    };
+    let structuredCount = 0;
 
-    const requirementsText = sections
-      .filter((s) => s.type === "REQUIREMENTS")
-      .map((s) => s.content)
-      .join("\n");
-
-    const preferredText = sections
-      .filter((s) => s.type === "PREFERRED_QUALIFICATIONS")
-      .map((s) => s.content)
-      .join("\n");
-
-    const responsibilitiesText = sections
-      .filter((s) => s.type === "RESPONSIBILITIES")
-      .map((s) => s.content)
-      .join("\n");
-
-    const overviewText = sections
-      .filter((s) => s.type === "OVERVIEW")
-      .map((s) => s.content)
-      .join("\n");
+    for (const section of sections) {
+      textByType[section.type]?.push(section.content);
+      if (section.type !== "GENERAL") {
+        structuredCount++;
+      }
+    }
 
     return {
-      hasStructuredSections,
+      hasStructuredSections: structuredCount >= 1,
       sections,
-      requirementsText,
-      preferredText,
-      responsibilitiesText,
-      overviewText,
+      requirementsText: textByType.REQUIREMENTS.join("\n"),
+      preferredText: textByType.PREFERRED_QUALIFICATIONS.join("\n"),
+      responsibilitiesText: textByType.RESPONSIBILITIES.join("\n"),
+      overviewText: textByType.OVERVIEW.join("\n"),
       fullCleanText: cleanText,
     };
   }

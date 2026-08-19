@@ -13,7 +13,11 @@ interface Student {
   branch: string;
   cgpa: string;
   batch_year: number;
-  colleges?: { name: string };
+  college_id?: string | null;
+  custom_institution_name?: string | null;
+  institution_source?: string | null;
+  institution_verified?: boolean;
+  colleges?: { name: string } | null;
   is_new?: boolean;
 }
 
@@ -73,7 +77,10 @@ export default function DashboardShell({ student, user, children }: DashboardShe
       .toUpperCase();
   };
 
-  const collegeName = student.colleges?.name || "Unknown College";
+  const collegeName =
+    student.custom_institution_name ||
+    student.colleges?.name ||
+    (student.college_id ? "Registered Institution" : "No institution selected");
   const isAdmin = student.college_email?.toLowerCase().includes("admin");
 
   const navLinks = student.is_new

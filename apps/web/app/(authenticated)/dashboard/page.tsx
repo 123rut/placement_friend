@@ -85,11 +85,12 @@ export default async function DashboardPage() {
   if (trackedCompanyIds.length > 0) {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-    // Query new jobs count
+    // Query approved relevant jobs count for tracked companies
     const { count: newJobsCount } = await supabase
       .from("jobs")
       .select("*", { count: "exact", head: true })
       .in("company_id", trackedCompanyIds)
+      .or("relevance_status.eq.APPROVED,relevance_status.is.null")
       .gte("created_at", oneDayAgo);
     newJobsTodayCount = newJobsCount || 0;
 

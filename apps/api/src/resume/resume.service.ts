@@ -512,9 +512,9 @@ ${rawText.slice(0, 8000)}`;
     return { profileId: insertResult.rows[0].id, profile };
   }
 
-  async updateExperience(
+  async updateProfile(
     userId: string,
-    experience: any[],
+    partial: Record<string, any>,
   ): Promise<CandidateProfileRecord> {
     const existing = await this.getProfile(userId);
 
@@ -522,24 +522,30 @@ ${rawText.slice(0, 8000)}`;
     if (existing) {
       profile = {
         ...existing,
-        experience,
+        skills: Array.isArray(partial.skills) ? partial.skills : existing.skills,
+        experience: Array.isArray(partial.experience) ? partial.experience : existing.experience,
+        preferredRoles: Array.isArray(partial.preferredRoles) ? partial.preferredRoles : existing.preferredRoles,
+        preferredIndustries: Array.isArray(partial.preferredIndustries) ? partial.preferredIndustries : existing.preferredIndustries,
+        preferredLocation: typeof partial.preferredLocation === "string" ? partial.preferredLocation : existing.preferredLocation,
+        personal: partial.personal && typeof partial.personal === "object" ? { ...existing.personal, ...partial.personal } : existing.personal,
       };
     } else {
       profile = {
         id: "",
         userId,
-        personal: { name: "", email: "", phone: "", location: "" },
+        personal: partial.personal || { name: "", email: "", phone: "", location: "" },
         summary: "",
-        skills: [],
-        experience,
+        skills: Array.isArray(partial.skills) ? partial.skills : [],
+        experience: Array.isArray(partial.experience) ? partial.experience : [],
         education: [],
         projects: [],
         certifications: [],
         achievements: [],
         publications: [],
         languages: [],
-        preferredRoles: [],
-        preferredIndustries: [],
+        preferredRoles: Array.isArray(partial.preferredRoles) ? partial.preferredRoles : [],
+        preferredIndustries: Array.isArray(partial.preferredIndustries) ? partial.preferredIndustries : [],
+        preferredLocation: partial.preferredLocation || "",
         workAuthorization: "",
         totalExperienceYears: 0,
         currentRole: "",
@@ -549,6 +555,7 @@ ${rawText.slice(0, 8000)}`;
       };
     }
 
+
     const embeddingText = this.buildEmbeddingText(profile);
     const embedding = await this.generateEmbedding(embeddingText);
     const embeddingParam = embedding ? `[${embedding.join(",")}]` : null;
@@ -556,28 +563,43 @@ ${rawText.slice(0, 8000)}`;
     if (existing) {
       await this.pool.query(
         `UPDATE candidate_profiles
-         SET experience = $2,
-             embedding = COALESCE($3::vector, embedding),
+         SET skills = $2,
+             experience = $3,
+             preferred_roles = $4,
+             preferred_industries = $5,
+             preferred_location = $6,
+             personal = $7,
+             embedding = COALESCE($8::vector, embedding),
              updated_at = NOW()
          WHERE user_id = $1::uuid`,
-        [userId, JSON.stringify(experience), embeddingParam]
+        [
+          userId,
+          profile.skills,
+          JSON.stringify(profile.experience),
+          profile.preferredRoles,
+          profile.preferredIndustries,
+          profile.preferredLocation,
+          JSON.stringify(profile.personal),
+          embeddingParam,
+        ]
       );
     } else {
       await this.pool.query(
         `INSERT INTO candidate_profiles (
           user_id,
+          skills,
           experience,
-          embedding,
+          preferred_roles,
+          preferred_industries,
+          preferred_location,
           personal,
+          embedding,
           education,
           projects,
           certifications,
           achievements,
           publications,
-          skills,
           languages,
-          preferred_roles,
-          preferred_industries,
           work_authorization,
           total_experience_years,
           "current_role",
@@ -585,22 +607,23 @@ ${rawText.slice(0, 8000)}`;
           career_stage
         )
         VALUES (
-          $1::uuid, $2, $3::vector, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+          $1::uuid, $2, $3, $4, $5, $6, $7, $8::vector, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
         )`,
         [
           userId,
-          JSON.stringify(experience),
-          embeddingParam,
+          profile.skills,
+          JSON.stringify(profile.experience),
+          profile.preferredRoles,
+          profile.preferredIndustries,
+          profile.preferredLocation,
           JSON.stringify(profile.personal),
+          embeddingParam,
           JSON.stringify(profile.education),
           JSON.stringify(profile.projects),
           JSON.stringify(profile.certifications),
           JSON.stringify(profile.achievements),
           JSON.stringify(profile.publications),
-          profile.skills,
           profile.languages,
-          profile.preferredRoles,
-          profile.preferredIndustries,
           profile.workAuthorization,
           profile.totalExperienceYears,
           profile.currentRole,

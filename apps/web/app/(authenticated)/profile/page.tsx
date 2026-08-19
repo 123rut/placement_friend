@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { createClient } from "../../../lib/supabase/server";
+import { createAdminClient, createClient } from "../../../lib/supabase/server";
 import { ProfileEditShell } from "./profile-edit-shell";
-import { seedCompanies } from "@piaa/domain";
+import { getMergedColleges } from "../../../lib/supabase/colleges";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -12,11 +12,13 @@ export default async function ProfilePage() {
     redirect("/login");
   }
 
-  // 2. Query student profile from the database
-  const { data: student } = await supabase
+  const adminDb = createAdminClient();
+
+  // 2. Query student profile from the database (by id or email)
+  const { data: student } = await adminDb
     .from("students")
     .select("*")
-    .eq("id", user.id)
+    .or(`id.eq.${user.id},college_email.eq.${user.email}`)
     .maybeSingle();
 
   // If student profile does not exist yet, prepare fallback default profile
@@ -24,13 +26,19 @@ export default async function ProfilePage() {
     id: user.id,
     full_name: user.email?.split("@")[0] || "New Student",
     college_email: user.email || "",
+    college_id: null,
+    custom_institution_name: null,
+    institution_source: null,
+    institution_verified: false,
     branch: "Computer Science",
     cgpa: "8.0",
     batch_year: new Date().getFullYear() + 2,
   };
 
+  // 3. Query all colleges from database and merge with domain catalog (deduplicated)
+  const allColleges = await getMergedColleges(supabase);
 
-  // 3. Query all companies from companies table to keep in sync with database records
+  // 4. Query all companies from companies table to keep in sync with database records
   const { data: dbCompanies } = await supabase
     .from("companies")
     .select("*")
@@ -60,7 +68,7 @@ export default async function ProfilePage() {
     };
   });
 
-  // 4. Query tracked companies from student_company_targets table
+  // 5. Query tracked companies from student_company_targets table
   const { data: targets } = await supabase
     .from("student_company_targets")
     .select("company_id")
@@ -72,8 +80,10 @@ export default async function ProfilePage() {
     <ProfileEditShell
       user={user}
       profile={defaultStudent}
+      colleges={allColleges}
       companies={mappedCompanies as any}
       initialSelectedCompanyIds={initialSelectedCompanyIds}
     />
   );
 }
+

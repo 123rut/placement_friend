@@ -10,18 +10,40 @@ import {
   RequirementCheck,
 } from "../careerpilot.types";
 import { DB_POOL } from "../db/db.module";
+import { LogicalJobKey } from "../classifier/logical-job-key";
 import { fetchWithRetry } from "../utils/fetch-retry";
 import { fetchGroqWithRotation } from "../utils/groq-keys";
 
+
 const JOB_SKILL_TERMS = [
+  "firmware",
+  "embedded systems",
+  "embedded",
+  "device drivers",
+  "rtos",
+  "linux",
+  "c++",
+  "c",
+  "rust",
+  "golang",
+  "python",
   "java",
   "spring boot",
   "spring",
   "node",
   "typescript",
-  "python",
+  "javascript",
   "react",
+  "cuda",
+  "pytorch",
+  "tensorflow",
+  "machine learning",
+  "deep learning",
+  "computer vision",
+  "nlp",
   "aws",
+  "azure",
+  "gcp",
   "docker",
   "kubernetes",
   "postgresql",
@@ -31,7 +53,10 @@ const JOB_SKILL_TERMS = [
   "microservices",
   "system design",
   "distributed systems",
+  "ci/cd",
+  "devops",
 ];
+
 
 const EARLY_CAREER_POSITIVE_PATTERN =
   "(intern|internship|graduate|new grad|new graduate|fresher|freshers|entry level|entry-level|campus|university|student|trainee|associate|junior)";
@@ -45,7 +70,60 @@ export class JobsService {
   async searchJobs(query = "", filters: JobSearchFilters = {}): Promise<JobSearchResult[]> {
     const limit = filters.limit || 20;
     const cleanQuery = (query || "").trim();
+
+    // 1. If query directly matches a known company name, prioritize returning only that company's jobs
+    if (cleanQuery) {
+      const companyMatch = await this.pool.query(
+        `SELECT id, name FROM companies WHERE name ILIKE $1 OR slug ILIKE $1`,
+        [cleanQuery]
+      );
+      if (companyMatch.rows.length > 0) {
+        const compIds = companyMatch.rows.map((r: any) => r.id);
+        const params: any[] = [compIds];
+        let sql = `
+          SELECT j.id,
+                 j.title,
+                 j.location,
+                 j.remote,
+                 j.employment_type,
+                 j.salary_min,
+                 j.salary_max,
+                 j.url,
+                 j.posted_at,
+                 j.logical_job_key,
+                 c.name AS company_name,
+                 c.industry,
+                 NULL::float AS similarity_score
+          FROM jobs j
+          JOIN companies c ON j.company_id = c.id
+          WHERE j.company_id = ANY($1::text[])
+            AND (j.relevance_status = 'APPROVED' OR j.relevance_status IS NULL)
+        `;
+
+        if (filters.location) {
+          params.push(`%${filters.location}%`);
+          sql += ` AND j.location ILIKE $${params.length}`;
+        }
+        if (filters.employmentType) {
+          params.push(filters.employmentType);
+          sql += ` AND j.employment_type = $${params.length}`;
+        }
+        if (filters.earlyCareerOnly) {
+          sql += this.earlyCareerSqlClause();
+        }
+
+        params.push(limit * 2);
+        sql += ` ORDER BY j.posted_at DESC NULLS LAST LIMIT $${params.length}`;
+
+        const res = await this.pool.query(sql, params);
+        if (res.rows.length > 0) {
+          return this.deduplicateJobs(res.rows).slice(0, limit);
+        }
+      }
+    }
+
     const embedding = cleanQuery ? await this.embedQuery(cleanQuery) : null;
+
 
     if (embedding) {
       const embStr = `[${embedding.join(",")}]`;
@@ -59,6 +137,7 @@ export class JobsService {
                j.salary_max,
                j.url,
                j.posted_at,
+               j.logical_job_key,
                c.name AS company_name,
                c.industry,
                1 - (j.embedding <=> $1::vector) AS similarity_score
@@ -83,11 +162,11 @@ export class JobsService {
         sql += this.earlyCareerSqlClause();
       }
 
-      params.push(limit);
+      params.push(limit * 2);
       sql += ` ORDER BY j.embedding <=> $1::vector LIMIT $${params.length}`;
 
       const res = await this.pool.query(sql, params);
-      return res.rows;
+      return this.deduplicateJobs(res.rows).slice(0, limit);
     }
 
     const clauses: string[] = ["(j.relevance_status = 'APPROVED' OR j.relevance_status IS NULL)"];
@@ -112,7 +191,7 @@ export class JobsService {
       clauses.push(this.earlyCareerSqlClause());
     }
 
-    params.push(limit);
+    params.push(limit * 2);
 
     const res = await this.pool.query(
       `SELECT j.id,
@@ -125,6 +204,7 @@ export class JobsService {
               j.url,
               j.posted_at,
               j.job_number,
+              j.logical_job_key,
               c.name AS company_name,
               c.industry,
               NULL::float AS similarity_score
@@ -136,8 +216,23 @@ export class JobsService {
       params,
     );
 
-    return res.rows;
+    return this.deduplicateJobs(res.rows).slice(0, limit);
   }
+
+  private deduplicateJobs<T extends { id?: string; logical_job_key?: string | null; company_name?: string; title?: string; location?: string | null }>(
+    jobs: T[]
+  ): T[] {
+    const seen = new Set<string>();
+    return jobs.filter((job) => {
+      const key =
+        job.logical_job_key ||
+        LogicalJobKey.generate(job.company_name || "", job.title || "", job.location || "global");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
 
   private earlyCareerSqlClause(): string {
     return `(
@@ -271,6 +366,20 @@ export class JobsService {
     const preferredScore = this.calculatePreferredRequirementScore(preferredRequirements);
     const finalScore = Math.round(explanation.matchScore * 0.65 + preferredScore * 0.35);
 
+    const finalMissingSkills = Array.from(
+      new Set([
+        ...(explanation.missingSkills || []),
+        ...missingSkills,
+      ])
+    ).slice(0, 5);
+
+    const finalStrengths = Array.from(
+      new Set([
+        ...(explanation.strengths || []),
+        ...profile.skills.filter((s) => jobText.includes(s.toLowerCase())),
+      ])
+    ).slice(0, 5);
+
     await this.pool.query(
       `INSERT INTO job_matches (user_id, job_id, match_score, explanation, strengths, missing_skills)
        VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)
@@ -285,8 +394,8 @@ export class JobsService {
         jobId,
         finalScore,
         explanation.explanation,
-        explanation.strengths,
-        missingSkills,
+        finalStrengths,
+        finalMissingSkills,
       ],
     );
 
@@ -298,17 +407,18 @@ export class JobsService {
       matchScore: finalScore,
       vectorSimilarity: vectorScore === null ? null : Math.round(vectorScore * 100),
       explanation: explanation.explanation,
-      strengths: explanation.strengths,
-      missingSkills,
+      strengths: finalStrengths,
+      missingSkills: finalMissingSkills,
       hardRequirements,
       preferredRequirements,
       recommendation:
-        missingSkills.length > 0
-          ? `Improve ${missingSkills.slice(0, 3).join(", ")} to raise your confidence score for similar roles.`
+        finalMissingSkills.length > 0
+          ? `Improve ${finalMissingSkills.slice(0, 3).join(", ")} to raise your confidence score for similar roles.`
           : "You satisfy the detected hard requirements and match the main preferred skills for this role.",
       rejectionReasons: [],
       applyUrl: job.url,
     };
+
   }
 
   async getTopMatches(userId: string, limit = 20): Promise<Record<string, unknown>[]> {
@@ -317,6 +427,7 @@ export class JobsService {
               j.title,
               j.url,
               j.location,
+              j.logical_job_key,
               c.name AS company_name,
               COALESCE(ot.status, 'NOT_VIEWED') AS status,
               ot.viewed_at,
@@ -335,10 +446,10 @@ export class JobsService {
          AND sjd.id IS NULL
        ORDER BY jm.match_score DESC
        LIMIT $2`,
-      [userId, limit],
+      [userId, limit * 2],
     );
 
-    return res.rows;
+    return this.deduplicateJobs(res.rows).slice(0, limit);
   }
 
   async analyzeSkillGap(userId: string, targetRole: string): Promise<Record<string, unknown>> {
@@ -423,10 +534,16 @@ export class JobsService {
 Candidate experience: ${exp}
 Candidate graduation batch year: ${batchYear || "N/A"}
 Job: ${String(job.title || "")} at ${String(job.company_name || "")}
-Job description (excerpt): ${String(job.description || "").slice(0, 700)}
+Job description (excerpt): ${String(job.description || "").slice(0, 800)}
 Vector similarity score: ${vectorScore === null ? "N/A" : `${Math.round(vectorScore * 100)}%`}
 
-Rule: If the candidate's graduation year is 2025, 2026, or 2027 (meaning they are a student), and the job is a senior/lead/staff role or requires multiple years of professional experience (e.g. 3+, 5+, or 8+ years), the matchScore MUST be very low (between 5 and 15) and the explanation must state that the candidate is ineligible due to being a student.
+Matching Rules:
+1. If the candidate's graduation year is 2025, 2026, or 2027 (meaning they are a student), and the job is a senior/lead/staff role or requires multiple years of professional experience (e.g. 3+, 5+, or 8+ years), the matchScore MUST be very low (between 5 and 20) and explanation must state that the candidate is a graduating student.
+2. If matchScore is below 90%, you MUST provide 1 to 4 clear, genuine reasons in "missingSkills" explaining why it isn't higher. Examples of valid gap items:
+   - Specific missing technical skills (e.g. "Firmware", "Embedded Systems", "RTOS", "AWS", "Kubernetes")
+   - Experience gap (e.g. "Professional firmware experience", "Multi-year production experience")
+   - Specialization gap (e.g. "Hardware-software integration", "Distributed systems at scale")
+3. If matchScore is >= 90%, "missingSkills" can be empty [] if the profile has comprehensive coverage.
 
 Return JSON only:
 {
@@ -435,6 +552,7 @@ Return JSON only:
   "strengths": ["skill1", "skill2"],
   "missingSkills": ["gap1", "gap2"]
 }`;
+
 
       try {
         const body = JSON.stringify({
@@ -466,7 +584,7 @@ Return JSON only:
 
     // Safety Override: Enforce student batch graduation vs senior experience hard constraint & compulsory requirements verification
     const jobText = `${String(job.title || "")} ${String(job.description || "")}`.toLowerCase();
-    const verification = this.verifyCompulsoryRequirements(profile, jobText, String(job.title || ""), batchYear, minCgpa, studentCgpa);
+    const verification = this.verifyCompulsoryRequirements(profile, jobText, String(job.title || ""), batchYear, minCgpa, studentCgpa, null, String(job.location || ""));
 
     if (!verification.ok) {
       finalExplanation.matchScore = 12;
@@ -492,7 +610,7 @@ Return JSON only:
     const scoreBoost = Math.min(25, matchedSkills.length * 8);
 
     // Run compulsory checks
-    const verification = this.verifyCompulsoryRequirements(profile, jobText, String(job.title || ""), batchYear, minCgpa, studentCgpa);
+    const verification = this.verifyCompulsoryRequirements(profile, jobText, String(job.title || ""), batchYear, minCgpa, studentCgpa, null, String(job.location || ""));
 
     if (!verification.ok) {
       return {
@@ -506,17 +624,32 @@ Return JSON only:
     const studentPenalty = this.hasSeniorExperienceRequirement(jobText) ? 25 : 0;
     const matchScore = Math.max(20, Math.min(98, baseScore + scoreBoost - missingSkills.length * 3 - studentPenalty));
 
+    // Ensure genuine gap reasons for scores below 90%
+    const finalHeuristicMissing = [...missingSkills];
+    if (matchScore < 90 && finalHeuristicMissing.length === 0) {
+      if (studentPenalty > 0) {
+        finalHeuristicMissing.push("Professional industry experience");
+      } else if (matchScore < 60) {
+        finalHeuristicMissing.push("Domain specialization & project depth");
+      } else if (matchScore < 75) {
+        finalHeuristicMissing.push("Advanced system design & tooling");
+      } else {
+        finalHeuristicMissing.push("Project depth in production environment");
+      }
+    }
+
     return {
       matchScore,
       explanation:
         studentPenalty > 0
           ? "This role appears to ask for several years of prior experience, so I would treat it as a stretch role for a student profile unless the description also mentions internships, graduate hiring, or campus roles."
           : matchedSkills.length > 0
-            ? `Your profile already matches ${matchedSkills.join(", ")} for this role. Focus next on ${missingSkills.slice(0, 2).join(", ") || "deepening project depth"} to improve your odds.`
+            ? `Your profile already matches ${matchedSkills.join(", ")} for this role. Focus next on ${finalHeuristicMissing.slice(0, 2).join(", ") || "deepening project depth"} to improve your odds.`
             : "This role is directionally relevant, but the job description does not strongly overlap with the skills extracted from your resume yet.",
       strengths: matchedSkills.length > 0 ? matchedSkills : profile.skills.slice(0, 3),
-      missingSkills,
+      missingSkills: finalHeuristicMissing,
     };
+
   }
 
   private verifyCompulsoryRequirements(
@@ -526,48 +659,21 @@ Return JSON only:
     batchYear: number | null,
     minCgpa?: number | null,
     studentCgpa?: number | null,
+    branch?: string | null,
+    location?: string,
   ): { ok: boolean; mismatches: string[] } {
-    const mismatches: string[] = [];
-
-    // 1. Check Experience Requirement
-    const isStudent = batchYear && (batchYear >= 2025 && batchYear <= 2028);
-    const requiredYears = this.extractRequiredYearsOfExperience(jobText);
-    const candidateYears = this.getCandidateExperienceYears(profile);
-
-    if (requiredYears > 0) {
-      if (isStudent && requiredYears >= 2) {
-        mismatches.push(`Job requires ${requiredYears}+ years of experience, but you are a graduating student of the ${batchYear} batch.`);
-      } else if (candidateYears < requiredYears) {
-        mismatches.push(`Job requires ${requiredYears}+ years of experience, but your resume shows only ${candidateYears} year(s).`);
-      }
-    }
-
-    // 2. Check Degree Requirements
-    const requiredDegrees = this.extractRequiredDegrees(jobText);
-    if (requiredDegrees.length > 0) {
-      const degreesList = profile.education || [];
-      if (degreesList.length > 0) {
-        const degreeMatched = this.matchCandidateDegree(degreesList, requiredDegrees);
-        if (!degreeMatched) {
-          mismatches.push(`Job requires a ${requiredDegrees.join(" or ")}, but your resume shows: ${degreesList.map((e) => e.degree || "Degree").join(", ")}.`);
-        }
-      }
-    }
-
-    // 3. Check Senior Title Constraint
-    const isSenior = this.isSeniorRoleFromTitle(jobTitle);
-    if (isSenior && isStudent) {
-      mismatches.push("This is a Senior/Lead/Staff level role, which is unsuitable for a graduating student profile.");
-    }
-
-    // 4. Check CGPA Requirement
-    if (minCgpa !== undefined && minCgpa !== null && (studentCgpa === undefined || studentCgpa === null || studentCgpa < minCgpa)) {
-      mismatches.push(`Job requires a minimum CGPA of ${minCgpa}, but your profile shows ${studentCgpa || "no CGPA"}.`);
-    }
-
+    const checks = this.buildHardRequirementChecks(
+      profile,
+      jobText,
+      jobTitle,
+      location || "",
+      { batchYear, branch: branch || null, cgpa: studentCgpa },
+      minCgpa,
+    );
+    const failed = checks.filter((c) => !c.passed);
     return {
-      ok: mismatches.length === 0,
-      mismatches,
+      ok: failed.length === 0,
+      mismatches: failed.map((c) => c.detail),
     };
   }
 
@@ -942,9 +1048,35 @@ Return JSON only:
   }
 
   private toDisplayCase(skill: string): string {
+    const special: Record<string, string> = {
+      "c++": "C++",
+      "c": "C",
+      "aws": "AWS",
+      "gcp": "GCP",
+      "rtos": "RTOS",
+      "cuda": "CUDA",
+      "nlp": "NLP",
+      "ci/cd": "CI/CD",
+      "sql": "SQL",
+      "postgresql": "PostgreSQL",
+      "mysql": "MySQL",
+      "ai": "AI",
+      "ml": "ML",
+      "ai/ml": "AI/ML",
+      "graphql": "GraphQL",
+      "node": "Node.js",
+      "typescript": "TypeScript",
+      "javascript": "JavaScript",
+      "pytorch": "PyTorch",
+      "tensorflow": "TensorFlow",
+    };
+    const lower = (skill || "").trim().toLowerCase();
+    if (special[lower]) return special[lower];
+
     return skill
       .split(" ")
-      .map((part) => (part.length <= 3 ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1)))
+      .map((part) => (part.length <= 3 && !["and", "for", "the"].includes(part.toLowerCase()) ? part.toUpperCase() : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()))
       .join(" ");
   }
 }
+

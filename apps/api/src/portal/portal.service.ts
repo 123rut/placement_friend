@@ -1,6 +1,8 @@
 import { Injectable, Inject, HttpException, HttpStatus } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../db/db.module";
+import { LogicalJobKey } from "../classifier/logical-job-key";
+
 
 @Injectable()
 export class PortalService {
@@ -41,10 +43,13 @@ export class PortalService {
               j.url AS apply_url,
               j.created_at AS posted_at,
               j.location,
+              j.logical_job_key,
               c.name as company_name,
               c.min_cgpa,
               c.eligible_branches,
               COALESCE(ot.status, 'NOT_VIEWED') AS status,
+              COALESCE(ot.is_saved, FALSE) AS is_saved,
+              ot.saved_at,
               ot.viewed_at,
               ot.applied_at
        FROM jobs j
@@ -62,8 +67,16 @@ export class PortalService {
     );
 
     const matchedOpportunities: any[] = [];
+    const seen = new Set<string>();
 
     for (const job of jobsRes.rows) {
+      const key =
+        job.logical_job_key ||
+        LogicalJobKey.generate(job.company_name || "", job.role || "", job.location || "global");
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+
       const rawBranches = job.eligible_branches ? String(job.eligible_branches) : "";
       const allowedBranches = rawBranches.replace(/[{}"']/g, "").split(",").map(b => b.trim()).filter(Boolean);
 
@@ -78,6 +91,8 @@ export class PortalService {
         apply_url: job.apply_url,
         posted_at: job.posted_at,
         status: job.status || "NOT_VIEWED",
+        is_saved: !!job.is_saved,
+        saved_at: job.saved_at ? new Date(job.saved_at).toISOString() : null,
         viewed_at: job.viewed_at ? new Date(job.viewed_at).toISOString() : null,
         applied_at: job.applied_at ? new Date(job.applied_at).toISOString() : null,
       });
@@ -87,6 +102,10 @@ export class PortalService {
   }
 
   async markOpportunityViewed(jobId: string, studentId: string) {
+    if (!studentId) {
+      throw new HttpException("Student ID is required", HttpStatus.BAD_REQUEST);
+    }
+
     const studentRes = await this.pool.query(
       "SELECT id FROM students WHERE id = $1",
       [studentId]
@@ -122,6 +141,7 @@ export class PortalService {
         job_id: res.rows[0].job_id,
         student_id: res.rows[0].student_id,
         status: res.rows[0].status,
+        is_saved: !!res.rows[0].is_saved,
         viewed_at: res.rows[0].viewed_at,
         applied_at: res.rows[0].applied_at,
       }
@@ -129,6 +149,10 @@ export class PortalService {
   }
 
   async markOpportunityApplied(jobId: string, studentId: string) {
+    if (!studentId) {
+      throw new HttpException("Student ID is required", HttpStatus.BAD_REQUEST);
+    }
+
     const studentRes = await this.pool.query(
       "SELECT id FROM students WHERE id = $1",
       [studentId]
@@ -165,13 +189,146 @@ export class PortalService {
         job_id: res.rows[0].job_id,
         student_id: res.rows[0].student_id,
         status: res.rows[0].status,
+        is_saved: !!res.rows[0].is_saved,
         viewed_at: res.rows[0].viewed_at,
         applied_at: res.rows[0].applied_at,
       }
     };
   }
 
+  async markOpportunitySaved(jobId: string, studentId: string) {
+    if (!studentId) {
+      throw new HttpException("Student ID is required", HttpStatus.BAD_REQUEST);
+    }
+
+    const studentRes = await this.pool.query(
+      "SELECT id FROM students WHERE id = $1",
+      [studentId]
+    );
+    if (studentRes.rows.length === 0) {
+      throw new HttpException("Student profile not found", HttpStatus.NOT_FOUND);
+    }
+
+    const jobRes = await this.pool.query(
+      "SELECT id FROM jobs WHERE id = $1",
+      [jobId]
+    );
+    if (jobRes.rows.length === 0) {
+      throw new HttpException("Opportunity not found", HttpStatus.NOT_FOUND);
+    }
+
+    const res = await this.pool.query(
+      `INSERT INTO opportunity_tracking (student_id, job_id, status, is_saved, saved_at, created_at, updated_at)
+       VALUES ($1, $2, 'VIEWED', TRUE, NOW(), NOW(), NOW())
+       ON CONFLICT (student_id, job_id)
+       DO UPDATE SET
+         is_saved = TRUE,
+         saved_at = NOW(),
+         updated_at = NOW()
+       RETURNING *`,
+      [studentId, jobId]
+    );
+
+    return {
+      success: true,
+      data: {
+        job_id: res.rows[0].job_id,
+        student_id: res.rows[0].student_id,
+        is_saved: true,
+        saved_at: res.rows[0].saved_at,
+        status: res.rows[0].status,
+      }
+    };
+  }
+
+
+  async unmarkOpportunitySaved(jobId: string, studentId: string) {
+
+    await this.pool.query(
+      `UPDATE opportunity_tracking
+       SET is_saved = FALSE, updated_at = NOW()
+       WHERE student_id = $1 AND job_id = $2`,
+      [studentId, jobId]
+    );
+
+    return {
+      success: true,
+      data: {
+        job_id: jobId,
+        student_id: studentId,
+        is_saved: false,
+      }
+    };
+  }
+
+  async getSavedOpportunities(studentId: string) {
+    if (!studentId) {
+      return { data: [] };
+    }
+
+    const res = await this.pool.query(
+      `SELECT j.id,
+              j.company_id,
+              j.title AS role,
+              j.employment_type AS role_type,
+              j.url AS apply_url,
+              j.created_at AS posted_at,
+              j.location,
+              j.logical_job_key,
+              c.name AS company_name,
+              c.min_cgpa,
+              c.eligible_branches,
+              COALESCE(ot.status, 'NOT_VIEWED') AS status,
+              COALESCE(ot.is_saved, FALSE) AS is_saved,
+              ot.saved_at,
+              ot.viewed_at,
+              ot.applied_at,
+              jm.match_score,
+              jm.explanation,
+              jm.strengths,
+              jm.missing_skills
+       FROM opportunity_tracking ot
+       JOIN jobs j ON ot.job_id = j.id
+       JOIN companies c ON j.company_id = c.id
+       LEFT JOIN job_matches jm ON jm.job_id = j.id AND jm.user_id::text = $1
+       WHERE ot.student_id = $1
+         AND (ot.is_saved = TRUE OR ot.status = 'APPLIED')
+       ORDER BY ot.updated_at DESC`,
+      [studentId]
+    );
+
+
+    const data = res.rows.map((job: any) => {
+      const rawBranches = job.eligible_branches ? String(job.eligible_branches) : "";
+      const allowedBranches = rawBranches.replace(/[{}"']/g, "").split(",").map((b: string) => b.trim()).filter(Boolean);
+
+      return {
+        id: job.id,
+        company_name: job.company_name,
+        role: job.role,
+        role_type: job.role_type,
+        min_cgpa: job.min_cgpa ? parseFloat(job.min_cgpa) : null,
+        allowed_branches: allowedBranches,
+        apply_url: job.apply_url,
+        posted_at: job.posted_at,
+        location: job.location,
+        status: job.status || "NOT_VIEWED",
+        is_saved: !!job.is_saved,
+        saved_at: job.saved_at ? new Date(job.saved_at).toISOString() : null,
+        viewed_at: job.viewed_at ? new Date(job.viewed_at).toISOString() : null,
+        applied_at: job.applied_at ? new Date(job.applied_at).toISOString() : null,
+        matchScore: typeof job.match_score === "number" ? job.match_score : null,
+        explanation: job.explanation || "",
+        strengths: Array.isArray(job.strengths) ? job.strengths : [],
+        missingSkills: Array.isArray(job.missing_skills) ? job.missing_skills : [],
+      };
+    });
+
+    return { data };
+  }
+
   async dismissOpportunity(jobId: string, studentId: string) {
+
     if (!studentId) {
       throw new HttpException("Student ID is required", HttpStatus.BAD_REQUEST);
     }

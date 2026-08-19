@@ -11,7 +11,33 @@ export class PortalController {
     return this.portalService.getOpportunities(studentId);
   }
 
+  @Get("opportunities/saved")
+  async getSavedOpportunities(@Query("studentId") studentId: string) {
+    return this.portalService.getSavedOpportunities(studentId);
+  }
+
+  @Post("opportunities/:jobId/save")
+  async markOpportunitySaved(
+    @Param("jobId") jobId: string,
+    @Query("studentId") studentId: string,
+    @Body("studentId") bodyStudentId?: string
+  ) {
+    const sId = studentId || bodyStudentId;
+    return this.portalService.markOpportunitySaved(jobId, sId!);
+  }
+
+  @Post("opportunities/:jobId/unsave")
+  async unmarkOpportunitySaved(
+    @Param("jobId") jobId: string,
+    @Query("studentId") studentId: string,
+    @Body("studentId") bodyStudentId?: string
+  ) {
+    const sId = studentId || bodyStudentId;
+    return this.portalService.unmarkOpportunitySaved(jobId, sId!);
+  }
+
   @Post("opportunities/:jobId/view")
+
   async markOpportunityViewed(
     @Param("jobId") jobId: string,
     @Query("studentId") studentId: string,

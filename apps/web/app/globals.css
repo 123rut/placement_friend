@@ -166,6 +166,23 @@ button {
   font-weight: 600;
 }
 
+.danger-action-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: var(--radius);
+  transition: all 0.15s ease;
+}
+
+.danger-action-btn:hover {
+  background: rgba(239, 68, 68, 0.12) !important;
+  border-color: rgba(239, 68, 68, 0.45) !important;
+  color: #ef4444 !important;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.15);
+}
+
+
+
 .sidebar-footer {
   border-top: 1px solid var(--line);
   padding-top: 14px;

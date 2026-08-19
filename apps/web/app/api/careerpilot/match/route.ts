@@ -1,19 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "../../../../lib/supabase/server";
-import { getCareerPilotApiBaseUrl, getInternalHeaders, logRouteError, structuredError } from "../_lib";
-
-async function readUpstreamBody(response: Response) {
-  const text = await response.text();
-  if (!text) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { error: text };
-  }
-}
+import { getCareerPilotApiBaseUrl, getInternalHeaders, logRouteError, readUpstreamBody, structuredError } from "../_lib";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();

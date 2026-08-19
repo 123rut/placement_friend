@@ -70,6 +70,13 @@ async function run() {
     await client.query(dismissalsSql);
     console.log("Job dismissals migration applied successfully!");
 
+    // 1e. Run migrate-universal-colleges.sql
+    console.log("Reading migrate-universal-colleges.sql...");
+    const universalCollegesSql = fs.readFileSync(path.join(__dirname, 'migrate-universal-colleges.sql'), 'utf8');
+    console.log("Executing migrate-universal-colleges.sql...");
+    await client.query(universalCollegesSql);
+    console.log("Universal colleges migration applied successfully!");
+
     // 2. Run seed_colleges.sql
     console.log("Reading seed_colleges.sql...");
     const seedCollegesSql = fs.readFileSync(path.join(__dirname, 'seed_colleges.sql'), 'utf8');

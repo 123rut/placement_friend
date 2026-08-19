@@ -109,6 +109,19 @@ export default function DashboardClient({
     [eligibleCount, matchDensity, targets.length],
   );
 
+  const matchedJobIdSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const job of matchedJobs) {
+      if (job.id) set.add(String(job.id));
+      if (job.job_id) set.add(String(job.job_id));
+    }
+    return set;
+  }, [matchedJobs]);
+
+  const unMatchedOpportunities = useMemo(() => {
+    return opportunities.filter((opp) => !matchedJobIdSet.has(String(opp.id)));
+  }, [opportunities, matchedJobIdSet]);
+
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -314,9 +327,9 @@ export default function DashboardClient({
                   </div>
                 ) : null}
 
-                {opportunities.length > 0 ? (
+                {unMatchedOpportunities.length > 0 ? (
                   <div className="opportunity-grid">
-                    {opportunities.map((opp) => (
+                    {unMatchedOpportunities.map((opp) => (
                       <div
                         key={opp.id}
                         ref={(el) => {

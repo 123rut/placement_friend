@@ -13,6 +13,8 @@ export type CompanySource = "seed" | "user-added" | "crowdsourced" | "careerpilo
 
 export type NotificationChannel = "email" | "whatsapp" | "telegram" | "dashboard";
 
+export type InstitutionSource = "AUTO_DOMAIN" | "USER_SELECTED" | "CUSTOM";
+
 export type College = {
   id: string;
   name: string;
@@ -26,8 +28,11 @@ export type StudentProfile = {
   id: string;
   fullName: string;
   email: string;
-  collegeId: string;
-  collegeName: string;
+  collegeId: string | null;
+  collegeName: string | null;
+  customInstitutionName?: string | null;
+  institutionSource?: InstitutionSource;
+  institutionVerified?: boolean;
   branch: string;
   cgpa: number;
   batchYear: number;

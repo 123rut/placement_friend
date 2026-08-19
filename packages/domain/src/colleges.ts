@@ -107,36 +107,63 @@ export const colleges: College[] = [
     state: "Maharashtra",
     type: "government"
   },
-  {
-    id: "email",
-    name: "Google",
-    emailDomain: "gmail.com",
-    city: "",
-    state: "",
-    type: "private"
-  },
-  {
-    id: "email",
-    name: "Outlook",
-    emailDomain: "outlook.com",
-    city: "",
-    state: "",
-    type: "private"
-  },
-  {
-    id: "email",
-    name: "Yahoo",
-    emailDomain: "yahoo.com",
-    city: "",
-    state: "",
-    type: "private"
-  }
 ];
 
-export const getCollegeByEmail = (email: string) => {
+export const getCollegeByEmail = (email?: string | null): College | null => {
+  if (!email || typeof email !== "string") {
+    return null;
+  }
   const normalized = normalizeEmail(email);
-  const domain = normalized.includes("@") ? normalized.split("@")[1] : "";
-  return colleges.find((college) => college.emailDomain === domain) ?? null;
+  if (!normalized.includes("@")) {
+    return null;
+  }
+  const parts = normalized.split("@");
+  const domain = parts[parts.length - 1];
+  if (!domain) {
+    return null;
+  }
+  return colleges.find((college) => college.emailDomain.toLowerCase() === domain) ?? null;
 };
 
-export const isCollegeEmail = (email: string) => getCollegeByEmail(email) !== null;
+export const isCollegeEmail = (email?: string | null): boolean => getCollegeByEmail(email) !== null;
+
+export const findCollegeById = (id?: string | null): College | null => {
+  if (!id || typeof id !== "string") {
+    return null;
+  }
+  const normalizedId = id.trim().toLowerCase();
+  return colleges.find((college) => college.id.toLowerCase() === normalizedId) ?? null;
+};
+
+export const filterColleges = (
+  list: College[],
+  query?: string | null,
+  limit?: number
+): College[] => {
+  if (!query || typeof query !== "string") {
+    return typeof limit === "number" ? list.slice(0, limit) : list;
+  }
+  const term = query.trim().toLowerCase();
+  if (!term) {
+    return typeof limit === "number" ? list.slice(0, limit) : list;
+  }
+  const matched = list.filter((college) => {
+    return (
+      college.name.toLowerCase().includes(term) ||
+      college.id.toLowerCase().includes(term) ||
+      college.city.toLowerCase().includes(term) ||
+      college.state.toLowerCase().includes(term) ||
+      college.emailDomain.toLowerCase().includes(term)
+    );
+  });
+  return typeof limit === "number" ? matched.slice(0, Math.max(1, limit)) : matched;
+};
+
+export const searchColleges = (query?: string | null, limit: number = 20): College[] => {
+  if (!query || typeof query !== "string" || !query.trim()) {
+    return [];
+  }
+  return filterColleges(colleges, query, limit);
+};
+
+

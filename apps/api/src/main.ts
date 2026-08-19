@@ -11,10 +11,26 @@ import { AppModule } from "./app.module";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix("api");
+  const allowedExplicitOrigins = new Set([
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    ...(process.env.WEB_ORIGIN
+      ? process.env.WEB_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
+      : []),
+  ]);
+
+  const vercelPreviewRegex = /^https:\/\/[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*\.vercel\.app$/;
+
   app.enableCors({
-    origin: process.env.NODE_ENV === "production"
-      ? (process.env.WEB_ORIGIN ? process.env.WEB_ORIGIN.split(",") : [])
-      : (process.env.WEB_ORIGIN || "http://localhost:3000"),
+    origin: (requestOrigin, callback) => {
+      if (!requestOrigin) {
+        return callback(null, true);
+      }
+      if (allowedExplicitOrigins.has(requestOrigin) || vercelPreviewRegex.test(requestOrigin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Origin ${requestOrigin} not allowed by CORS`));
+    },
     credentials: true,
   });
 

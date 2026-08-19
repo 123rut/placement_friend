@@ -4,7 +4,9 @@ import React, { useMemo, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type { Company } from "@piaa/domain";
 import { createClient } from "../lib/supabase/client";
-import PreferencesPanel, { CompanyTarget } from "./PreferencesPanel";
+import CompanyLogo from "./CompanyLogo";
+
+
 
 interface WatchlistClientProps {
   userId: string;
@@ -318,24 +320,8 @@ export default function WatchlistClient({ userId }: WatchlistClientProps) {
     }
   };
 
-  const initialTargets: CompanyTarget[] = useMemo(() => {
-    return rawTargets.map((t) => {
-      const c = t.companies as any;
-      return {
-        company_id: t.company_id,
-        name: c?.name || "Unknown",
-        category: c?.category || "preferred",
-        notify_email: Boolean(t.notify_email),
-        notify_dashboard: Boolean(t.notify_dashboard),
-      };
-    });
-  }, [rawTargets]);
-
-  const handlePreferencesRefresh = async () => {
-    await loadDashboardData(true);
-  };
-
   if (loading && !data) {
+
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -453,11 +439,9 @@ export default function WatchlistClient({ userId }: WatchlistClientProps) {
           >
             {allMonitoringPaused ? "Resume Monitoring" : "Pause Monitoring"}
           </button>
-          <a href="#notifications-section" className="primary-link ghost-link" style={{ display: "flex", alignItems: "center" }}>
-            Notification Settings
-          </a>
         </div>
       </div>
+
 
       {syncError && (
         <div style={{ padding: "10px 14px", background: "rgba(255,0,0,0.1)", border: "1px solid red", borderRadius: "var(--radius)", color: "red", fontSize: "0.85rem" }}>
@@ -523,24 +507,9 @@ export default function WatchlistClient({ userId }: WatchlistClientProps) {
                   <div>
                     {/* Company Logo / Initials header */}
                     <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-                      <div 
-                        style={{ 
-                          width: "36px", 
-                          height: "36px", 
-                          borderRadius: "50%", 
-                          background: "var(--accent-soft)", 
-                          color: "var(--accent)", 
-                          display: "flex", 
-                          alignItems: "center", 
-                          justifyContent: "center",
-                          fontWeight: "bold",
-                          fontSize: "1.1rem",
-                        }}
-                      >
-                        {tc.name.charAt(0).toUpperCase()}
-                      </div>
+                      <CompanyLogo name={tc.name} size={38} />
                       <div>
-                        <strong style={{ fontSize: "1rem" }}>{tc.name}</strong>
+                        <strong style={{ fontSize: "1rem", color: "var(--text-primary)" }}>{tc.name}</strong>
                         <div className="metric-footnote">{tc.industry}</div>
                       </div>
                     </div>
@@ -594,8 +563,8 @@ export default function WatchlistClient({ userId }: WatchlistClientProps) {
                     <button 
                       type="button"
                       onClick={() => handleRemoveCompany(tc.id, tc.name)}
-                      className="primary-link ghost-link"
-                      style={{ flex: 1, padding: "4px 0", fontSize: "0.8rem", color: "var(--accent)" }}
+                      className="danger-action-btn"
+                      style={{ flex: 1, padding: "4px 0", fontSize: "0.8rem", cursor: "pointer", fontWeight: 500 }}
                     >
                       Remove
                     </button>
@@ -606,12 +575,6 @@ export default function WatchlistClient({ userId }: WatchlistClientProps) {
           </div>
         </section>
       </div>
-
-      {/* 4. Notification Preferences Accordions */}
-      <PreferencesPanel
-        initialTargets={initialTargets}
-        onRefresh={handlePreferencesRefresh}
-      />
     </div>
   );
 }
