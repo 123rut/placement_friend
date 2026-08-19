@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { College, Company } from "@piaa/domain";
 import { filterColleges, getCollegeByEmail } from "@piaa/domain";
 import type { User } from "@supabase/supabase-js";
@@ -26,7 +27,9 @@ export function ProfileEditShell({
   initialCandidateProfile,
   colleges = [],
 }: ProfileEditShellProps) {
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+
 
   // -------------------------------------------------------------
   // Profile & Academic State
@@ -323,6 +326,47 @@ export function ProfileEditShell({
     }
   };
 
+  const handleSaveAndContinue = async () => {
+    setIsSaving(true);
+    setSaveStatus(null);
+    try {
+      // 1. Update students table in Supabase
+      const { error: studentErr } = await supabase
+        .from("students")
+        .update({
+          full_name: fullName,
+          branch,
+          cgpa: parseFloat(cgpa) || 8.0,
+          batch_year: parseInt(batchYear, 10) || 2027,
+          college_id: selectedCollegeId || null,
+          custom_institution_name: customInstitutionName || null,
+        })
+        .eq("id", user.id);
+
+      if (studentErr) throw studentErr;
+
+      // 2. Update candidate_profiles in Nest API
+      await fetch("/api/careerpilot/resume", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skills,
+          experience: experiences,
+          preferredRoles,
+          preferredIndustries,
+          preferredLocation: preferredLocations[0] || "Remote",
+        }),
+      });
+
+      setSaveStatus("Profile saved! Entering Dashboard...");
+      router.push("/dashboard");
+    } catch (err: any) {
+      console.error("Failed to complete profile:", err);
+      setSaveStatus(`Error saving: ${err.message || "Please check your network"}`);
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px", maxWidth: "1160px", margin: "0 auto" }}>
       {/* ------------------------------------------------------------- */}
@@ -338,23 +382,48 @@ export function ProfileEditShell({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setActiveModal("profile")}
-          className="primary-link ghost-link"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-            fontSize: "0.82rem",
-            padding: "8px 16px",
-            borderRadius: "8px",
-            fontWeight: 600,
-          }}
-        >
-          ✏️ Edit Profile
-        </button>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => setActiveModal("profile")}
+            className="primary-link ghost-link"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              fontSize: "0.82rem",
+              padding: "8px 14px",
+              borderRadius: "8px",
+              fontWeight: 600,
+            }}
+          >
+            ✏️ Edit Profile
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSaveAndContinue}
+            disabled={isSaving}
+            className="primary-link"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              fontSize: "0.85rem",
+              padding: "8px 20px",
+              borderRadius: "8px",
+              fontWeight: 700,
+              background: "var(--good)",
+              color: "#022c22",
+              cursor: "pointer",
+            }}
+          >
+            {isSaving ? "Saving..." : "Save"}
+          </button>
+        </div>
       </div>
+
+
 
       {saveStatus && (
         <div
@@ -1015,6 +1084,8 @@ export function ProfileEditShell({
       {/* ------------------------------------------------------------- */}
       {/* MODAL 1: EDIT PROFILE & ACADEMICS                             */}
       {/* ------------------------------------------------------------- */}
+
+
       {activeModal === "profile" && (
 
         <div
