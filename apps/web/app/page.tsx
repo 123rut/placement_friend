@@ -54,9 +54,19 @@ export default async function HomePage() {
     redirect("/login");
   }
 
-  if (studentProfile) {
+  const hasCgpa = studentProfile?.cgpa !== null && studentProfile?.cgpa !== undefined && studentProfile?.cgpa !== "";
+  const hasCollege = Boolean(studentProfile?.college_id || studentProfile?.custom_institution_name);
+  const isProfileComplete = Boolean(
+    studentProfile &&
+    studentProfile.full_name?.trim() &&
+    studentProfile.branch?.trim() &&
+    hasCgpa &&
+    hasCollege
+  );
+
+  if (isProfileComplete) {
     redirect("/dashboard");
   }
 
   redirect("/profile");
-}
+}

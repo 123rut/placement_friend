@@ -18,12 +18,12 @@ export default async function AuthenticatedLayout({ children }: AuthenticatedLay
     redirect("/login");
   }
 
-  // 2. Query student profile with college name using authenticated session client
+  // 2. Query student profile using authenticated session client
   let student: any = null;
 
   const { data: authStudent } = await supabase
     .from("students")
-    .select("*, colleges(name)")
+    .select("*")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -32,7 +32,7 @@ export default async function AuthenticatedLayout({ children }: AuthenticatedLay
   if (!student && user.email) {
     const { data: emailStudent } = await supabase
       .from("students")
-      .select("*, colleges(name)")
+      .select("*")
       .eq("college_email", user.email)
       .maybeSingle();
     student = emailStudent;
@@ -43,12 +43,13 @@ export default async function AuthenticatedLayout({ children }: AuthenticatedLay
       const adminDb = createAdminClient();
       const { data: adminStudent } = await adminDb
         .from("students")
-        .select("*, colleges(name)")
+        .select("*")
         .or(`id.eq.${user.id},college_email.eq.${user.email}`)
         .maybeSingle();
       if (adminStudent) student = adminStudent;
     } catch {}
   }
+
 
   const hasCgpa = student?.cgpa !== null && student?.cgpa !== undefined && student?.cgpa !== "";
   const hasCollege = Boolean(student?.college_id || student?.custom_institution_name);
