@@ -21,19 +21,22 @@ export default async function ProfilePage() {
     .or(`id.eq.${user.id},college_email.eq.${user.email}`)
     .maybeSingle();
 
-  // If student profile does not exist yet, prepare fallback default profile
+  // If student profile does not exist yet, prepare clean default profile
   const defaultStudent = student || {
     id: user.id,
-    full_name: user.email?.split("@")[0] || "New Student",
+    full_name: user.user_metadata?.full_name || user.email?.split("@")[0] || "",
     college_email: user.email || "",
     college_id: null,
     custom_institution_name: null,
     institution_source: null,
     institution_verified: false,
-    branch: "Computer Science",
-    cgpa: "8.0",
-    batch_year: new Date().getFullYear() + 2,
+    branch: "",
+    cgpa: "",
+    batch_year: 2027,
+    is_new: true,
   };
+
+
 
   // 3. Query all colleges from database and merge with domain catalog (deduplicated)
   const allColleges = await getMergedColleges(supabase);

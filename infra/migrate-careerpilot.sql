@@ -78,7 +78,7 @@ CREATE INDEX IF NOT EXISTS jobs_embedding_idx ON jobs USING ivfflat (embedding v
 -- 4. Candidate profiles — parsed from resumes
 CREATE TABLE IF NOT EXISTS candidate_profiles (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id             UUID,                       -- links to Supabase auth user
+  user_id             UUID REFERENCES auth.users(id) ON DELETE CASCADE, -- links to Supabase auth user
   resume_raw_text     TEXT,                       -- full extracted text from PDF/DOCX
   resume_file_url     TEXT,                       -- Supabase storage URL
   skills              TEXT[] DEFAULT '{}',
@@ -127,7 +127,7 @@ CREATE INDEX IF NOT EXISTS profiles_embedding_idx ON candidate_profiles USING iv
 -- 5. Job matches — cached AI match results
 CREATE TABLE IF NOT EXISTS job_matches (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id         UUID NOT NULL,
+  user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   job_id          UUID REFERENCES jobs(id) ON DELETE CASCADE,
   match_score     FLOAT,                          -- 0-100
   explanation     TEXT,                           -- LLM-written explanation
@@ -143,7 +143,8 @@ CREATE INDEX IF NOT EXISTS matches_score_idx ON job_matches(match_score DESC);
 -- 6. Conversations — persisted chat history per user
 CREATE TABLE IF NOT EXISTS conversations (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     UUID NOT NULL,
+  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+
   title       TEXT,                               -- auto-generated from first message
   messages    JSONB DEFAULT '[]',                -- [{role, content, timestamp}]
   created_at  TIMESTAMPTZ DEFAULT NOW(),

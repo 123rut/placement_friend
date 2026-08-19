@@ -422,35 +422,75 @@ export class JobsService {
   }
 
   async getTopMatches(userId: string, limit = 20): Promise<Record<string, unknown>[]> {
-    const res = await this.pool.query(
-      `SELECT jm.*,
-              j.title,
-              j.url,
-              j.location,
-              j.logical_job_key,
-              c.name AS company_name,
-              COALESCE(ot.status, 'NOT_VIEWED') AS status,
-              ot.viewed_at,
-              ot.applied_at
-       FROM job_matches jm
-       JOIN jobs j ON jm.job_id = j.id
-       JOIN companies c ON j.company_id = c.id
-       LEFT JOIN opportunity_tracking ot ON ot.job_id = j.id AND ot.student_id = $1::text
-       LEFT JOIN student_job_dismissals sjd ON sjd.student_id = $1::text AND (
-         sjd.job_id = j.id OR
-         (j.logical_job_key IS NOT NULL AND sjd.logical_job_key = j.logical_job_key)
-       )
-       WHERE jm.user_id = $1::uuid
-         AND jm.match_score > 20
-         AND (j.relevance_status = 'APPROVED' OR j.relevance_status IS NULL)
-         AND sjd.id IS NULL
-       ORDER BY jm.match_score DESC
-       LIMIT $2`,
-      [userId, limit * 2],
-    );
+    const fetchMatchesQuery = async () => {
+      const res = await this.pool.query(
+        `SELECT jm.*,
+                j.title,
+                j.url,
+                j.location,
+                j.logical_job_key,
+                c.name AS company_name,
+                COALESCE(ot.status, 'NOT_VIEWED') AS status,
+                ot.viewed_at,
+                ot.applied_at
+         FROM job_matches jm
+         JOIN jobs j ON jm.job_id = j.id
+         JOIN companies c ON j.company_id = c.id
+         LEFT JOIN opportunity_tracking ot ON ot.job_id = j.id AND ot.student_id = $1::text
+         LEFT JOIN student_job_dismissals sjd ON sjd.student_id = $1::text AND (
+           sjd.job_id = j.id OR
+           (j.logical_job_key IS NOT NULL AND sjd.logical_job_key = j.logical_job_key)
+         )
+         WHERE jm.user_id = $1::uuid
+           AND jm.match_score > 20
+           AND (j.relevance_status = 'APPROVED' OR j.relevance_status IS NULL)
+           AND sjd.id IS NULL
+         ORDER BY jm.match_score DESC
+         LIMIT $2`,
+        [userId, limit * 2],
+      );
+      return this.deduplicateJobs(res.rows).slice(0, limit);
+    };
 
-    return this.deduplicateJobs(res.rows).slice(0, limit);
+    let matches = await fetchMatchesQuery();
+
+    // If no precomputed matches exist in job_matches table, dynamically evaluate top candidate jobs
+    if (matches.length === 0) {
+      try {
+        const topJobsRes = await this.pool.query(
+          `SELECT j.id
+           FROM jobs j
+           JOIN companies c ON j.company_id = c.id
+           LEFT JOIN candidate_profiles p ON p.user_id = $1::uuid
+           LEFT JOIN student_job_dismissals sjd ON sjd.student_id = $1::text AND sjd.job_id = j.id
+           WHERE (j.relevance_status = 'APPROVED' OR j.relevance_status IS NULL)
+             AND sjd.id IS NULL
+           ORDER BY CASE 
+             WHEN p.embedding IS NOT NULL AND j.embedding IS NOT NULL 
+             THEN (j.embedding <=> p.embedding) 
+             ELSE random() 
+           END
+           LIMIT 10`,
+          [userId]
+        );
+
+        for (const row of topJobsRes.rows) {
+          try {
+            await this.matchJobToProfile(row.id, userId, { fast: true });
+          } catch {
+            // ignore individual match errors
+          }
+        }
+
+        matches = await fetchMatchesQuery();
+      } catch (err) {
+        console.error("Failed to auto-evaluate top matches:", err);
+      }
+    }
+
+    return matches;
   }
+
 
   async analyzeSkillGap(userId: string, targetRole: string): Promise<Record<string, unknown>> {
     const profileRes = await this.pool.query(

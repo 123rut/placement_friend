@@ -36,16 +36,17 @@ export function ProfileEditShell({
   // -------------------------------------------------------------
   const [profile, setProfile] = useState(initialProfile);
   const [fullName, setFullName] = useState(initialProfile.full_name ?? "");
-  const [branch, setBranch] = useState(initialProfile.branch ?? "Computer Science");
-  const [cgpa, setCgpa] = useState(initialProfile.cgpa?.toString() ?? "7.55");
+  const [branch, setBranch] = useState(initialProfile.branch ?? "");
+  const [cgpa, setCgpa] = useState(initialProfile.cgpa ? initialProfile.cgpa.toString() : "");
   const [batchYear, setBatchYear] = useState(initialProfile.batch_year?.toString() ?? "2027");
+
 
   // Institution State
   const autoDetectedCollege = useMemo(() => getCollegeByEmail(user.email || ""), [user.email]);
   const [selectedCollegeId, setSelectedCollegeId] = useState<string>(initialProfile.college_id ?? (autoDetectedCollege?.id || ""));
   const [customInstitutionName, setCustomInstitutionName] = useState<string>(initialProfile.custom_institution_name ?? "");
   const [collegeSearchQuery, setCollegeSearchQuery] = useState("");
-  const [isSelectingCollege, setIsSelectingCollege] = useState(!initialProfile.college_id && !initialProfile.custom_institution_name);
+  const [isSelectingCollege, setIsSelectingCollege] = useState(!initialProfile.college_id && !initialProfile.custom_institution_name && !autoDetectedCollege);
 
   const filteredColleges = useMemo(() => {
     return filterColleges(colleges, collegeSearchQuery, 20);
@@ -58,8 +59,9 @@ export function ProfileEditShell({
       if (match) return match.name;
     }
     if (autoDetectedCollege) return autoDetectedCollege.name;
-    return "BITS Pilani";
+    return "Not selected";
   }, [customInstitutionName, selectedCollegeId, colleges, autoDetectedCollege]);
+
 
   // -------------------------------------------------------------
   // Resume & Candidate Profile State (from database / candidate_profiles)
@@ -177,24 +179,45 @@ export function ProfileEditShell({
   // -------------------------------------------------------------
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSaving(true);
     setSaveStatus(null);
 
-    try {
-      // 1. Update students table in Supabase
-      const { error: studentErr } = await supabase
-        .from("students")
-        .update({
-          full_name: fullName,
-          branch,
-          cgpa: parseFloat(cgpa) || 8.0,
-          batch_year: parseInt(batchYear, 10) || 2027,
-          college_id: selectedCollegeId || null,
-          custom_institution_name: customInstitutionName || null,
-        })
-        .eq("id", user.id);
+    // Validation
+    const missing: string[] = [];
+    if (!fullName.trim()) missing.push("Full Name");
+    if (!selectedCollegeId && !customInstitutionName.trim()) missing.push("Institution / College");
+    if (!branch.trim()) missing.push("Branch / Stream");
+    const numCgpa = parseFloat(cgpa);
+    if (!cgpa || isNaN(numCgpa) || numCgpa <= 0 || numCgpa > 10) missing.push("Valid CGPA (0.0 - 10.0)");
+    const numBatch = parseInt(batchYear, 10);
+    if (!batchYear || isNaN(numBatch) || numBatch < 2000 || numBatch > 2100) missing.push("Graduation Batch Year");
 
-      if (studentErr) throw studentErr;
+    if (missing.length > 0) {
+      setSaveStatus(`⚠️ Form Incomplete: Please fill in ${missing.join(", ")}.`);
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      // 1. Update students table via server-side API (admin client)
+      const studentRes = await fetch("/api/students/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName,
+          branch,
+          cgpa,
+          batchYear,
+          collegeId: selectedCollegeId,
+          customInstitutionName,
+          institutionSource: customInstitutionName ? "CUSTOM" : "USER_SELECTED",
+        }),
+      });
+
+      if (!studentRes.ok) {
+        const errJson = await studentRes.json().catch(() => ({}));
+        throw new Error(errJson.error || "Failed to update academic profile");
+      }
 
       setProfile((prev: any) => ({
         ...prev,
@@ -207,7 +230,8 @@ export function ProfileEditShell({
       }));
 
       setActiveModal(null);
-      setSaveStatus("Profile saved successfully");
+      setSaveStatus("✓ Profile saved successfully");
+      router.refresh();
       setTimeout(() => setSaveStatus(null), 3000);
     } catch (err: any) {
       console.error("Failed to save profile:", err);
@@ -216,6 +240,7 @@ export function ProfileEditShell({
       setIsSaving(false);
     }
   };
+
 
   const handleAddSkill = () => {
     const trimmed = newSkillInput.trim();
@@ -305,47 +330,49 @@ export function ProfileEditShell({
     }
   };
 
-  const handleSaveLinks = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveProfileDirect = async () => {
+    setSaveStatus(null);
+
+    // Validation
+    const missing: string[] = [];
+    if (!fullName.trim()) missing.push("Full Name");
+    if (!selectedCollegeId && !customInstitutionName.trim()) missing.push("Institution / College");
+    if (!branch.trim()) missing.push("Branch / Stream");
+    const numCgpa = parseFloat(cgpa);
+    if (!cgpa || isNaN(numCgpa) || numCgpa <= 0 || numCgpa > 10) missing.push("Valid CGPA (0.0 - 10.0)");
+    const numBatch = parseInt(batchYear, 10);
+    if (!batchYear || isNaN(numBatch) || numBatch < 2000 || numBatch > 2100) missing.push("Graduation Batch Year");
+
+    if (missing.length > 0) {
+      setSaveStatus(`⚠️ Form Incomplete: Please fill in ${missing.join(", ")}.`);
+      setActiveModal("profile");
+      return;
+    }
+
     setIsSaving(true);
+
     try {
-      await fetch("/api/careerpilot/resume", {
+      // 1. Update students table via server-side API (admin client)
+      const studentRes = await fetch("/api/students/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          personal: socialLinks,
+          fullName,
+          branch,
+          cgpa,
+          batchYear,
+          collegeId: selectedCollegeId,
+          customInstitutionName,
+          institutionSource: customInstitutionName ? "CUSTOM" : "USER_SELECTED",
         }),
       });
-      setActiveModal(null);
-      setSaveStatus("Social links updated");
-      setTimeout(() => setSaveStatus(null), 3000);
-    } catch (err) {
-      console.error("Failed to update links:", err);
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
-  const handleSaveAndContinue = async () => {
-    setIsSaving(true);
-    setSaveStatus(null);
-    try {
-      // 1. Update students table in Supabase
-      const { error: studentErr } = await supabase
-        .from("students")
-        .update({
-          full_name: fullName,
-          branch,
-          cgpa: parseFloat(cgpa) || 8.0,
-          batch_year: parseInt(batchYear, 10) || 2027,
-          college_id: selectedCollegeId || null,
-          custom_institution_name: customInstitutionName || null,
-        })
-        .eq("id", user.id);
+      if (!studentRes.ok) {
+        const errJson = await studentRes.json().catch(() => ({}));
+        throw new Error(errJson.error || "Failed to update academic profile");
+      }
 
-      if (studentErr) throw studentErr;
-
-      // 2. Update candidate_profiles in Nest API
+      // 2. Update candidate_profiles in Nest API (skills, experience, preferences)
       await fetch("/api/careerpilot/resume", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -358,14 +385,37 @@ export function ProfileEditShell({
         }),
       });
 
-      setSaveStatus("Profile saved! Entering Dashboard...");
-      router.push("/dashboard");
+      setProfile((prev: any) => ({
+        ...prev,
+        full_name: fullName,
+        branch,
+        cgpa,
+        batch_year: batchYear,
+        college_id: selectedCollegeId,
+        custom_institution_name: customInstitutionName,
+        is_new: false,
+      }));
+
+      setSaveStatus("✓ All profile changes saved successfully!");
+      router.refresh();
+
+      if (initialProfile?.is_new) {
+        setTimeout(() => {
+          router.push("/dashboard");
+        }, 1200);
+      } else {
+        setTimeout(() => setSaveStatus(null), 4000);
+      }
     } catch (err: any) {
-      console.error("Failed to complete profile:", err);
-      setSaveStatus(`Error saving: ${err.message || "Please check your network"}`);
+      console.error("Failed to save profile:", err);
+      setSaveStatus(`Error saving: ${err.message || "Please check your connection"}`);
+    } finally {
       setIsSaving(false);
     }
   };
+
+  const isWarning = saveStatus?.includes("⚠️") || saveStatus?.includes("Incomplete");
+  const isError = saveStatus?.includes("Error");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px", maxWidth: "1160px", margin: "0 auto" }}>
@@ -402,7 +452,7 @@ export function ProfileEditShell({
 
           <button
             type="button"
-            onClick={handleSaveAndContinue}
+            onClick={handleSaveProfileDirect}
             disabled={isSaving}
             className="primary-link"
             style={{
@@ -423,23 +473,36 @@ export function ProfileEditShell({
         </div>
       </div>
 
-
-
       {saveStatus && (
         <div
           style={{
-            padding: "10px 16px",
-            borderRadius: "8px",
-            background: saveStatus.includes("Error") ? "rgba(239, 68, 68, 0.15)" : "rgba(16, 185, 129, 0.15)",
-            border: `1px solid ${saveStatus.includes("Error") ? "rgba(239, 68, 68, 0.3)" : "rgba(16, 185, 129, 0.3)"}`,
-            color: saveStatus.includes("Error") ? "#ef4444" : "var(--good)",
-            fontSize: "0.85rem",
+            padding: "12px 18px",
+            borderRadius: "10px",
+            background: isWarning
+              ? "rgba(245, 158, 11, 0.15)"
+              : isError
+              ? "rgba(239, 68, 68, 0.15)"
+              : "rgba(16, 185, 129, 0.15)",
+            border: `1px solid ${
+              isWarning
+                ? "rgba(245, 158, 11, 0.4)"
+                : isError
+                ? "rgba(239, 68, 68, 0.3)"
+                : "rgba(16, 185, 129, 0.3)"
+            }`,
+            color: isWarning ? "#fbbf24" : isError ? "#ef4444" : "var(--good)",
+            fontSize: "0.88rem",
             fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            boxShadow: isWarning ? "0 4px 14px rgba(245, 158, 11, 0.15)" : undefined,
           }}
         >
           {saveStatus}
         </div>
       )}
+
 
       {/* ------------------------------------------------------------- */}
       {/* 2. HERO IDENTITY BANNER (Glassmorphism & Radial Glow)         */}
@@ -549,55 +612,32 @@ export function ProfileEditShell({
             </div>
           </div>
         </div>
-
-        {/* Right: Career Focus Tag */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "14px",
-            padding: "16px 20px",
-            borderRadius: "12px",
-            background: "rgba(15, 23, 42, 0.6)",
-            border: "1px solid rgba(255, 255, 255, 0.06)",
-          }}
-        >
-          <span style={{ fontSize: "1.6rem" }}>🎯</span>
-          <div>
-            <span style={{ fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em", display: "block" }}>
-              Building a career in
-            </span>
-            <strong style={{ fontSize: "1.05rem", color: "var(--good)", fontWeight: 700 }}>
-              {targetFocus}
-            </strong>
-          </div>
-        </div>
       </section>
 
       {/* ------------------------------------------------------------- */}
-      {/* 3. OVERVIEW (4 KPI Snapshot Cards)                            */}
+      {/* 3. OVERVIEW (3 Real Academic Snapshot Cards)                  */}
       {/* ------------------------------------------------------------- */}
       <section style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         <h2 style={{ fontSize: "1.2rem", fontWeight: 800, margin: 0, color: "var(--text-primary)" }}>
           Overview
         </h2>
         <span style={{ fontSize: "0.8rem", color: "var(--muted)", marginTop: "-6px" }}>
-          Quick snapshot of your profile
+          Quick snapshot of your verified academic profile
         </span>
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
             gap: "16px",
             marginTop: "6px",
           }}
         >
-          {/* Card 1: Education */}
+          {/* Card 1: Institution & Stream */}
           <article
             className="panel"
             style={{
-              padding: "16px 18px",
+              padding: "18px 20px",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
@@ -607,8 +647,8 @@ export function ProfileEditShell({
             <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
               <div
                 style={{
-                  width: "34px",
-                  height: "34px",
+                  width: "36px",
+                  height: "36px",
                   borderRadius: "8px",
                   background: "rgba(59, 130, 246, 0.12)",
                   border: "1px solid rgba(59, 130, 246, 0.3)",
@@ -616,27 +656,80 @@ export function ProfileEditShell({
                   alignItems: "center",
                   justifyContent: "center",
                   color: "#60a5fa",
-                  fontSize: "0.95rem",
+                  fontSize: "1rem",
                 }}
               >
-                🎓
+                🏛️
               </div>
-              <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600 }}>Education</span>
+              <span style={{ fontSize: "0.78rem", color: "var(--muted)", fontWeight: 600 }}>Institution</span>
             </div>
 
-            <div style={{ marginTop: "12px" }}>
-              <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>{currentInstitutionName}</h3>
-              <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "2px 0 0" }}>{branch}</p>
-              <div style={{ marginTop: "8px" }}>
-
+            <div style={{ marginTop: "14px" }}>
+              <h3 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>{currentInstitutionName}</h3>
+              <p style={{ fontSize: "0.8rem", color: "var(--muted)", margin: "3px 0 0" }}>{branch || "Branch not specified"}</p>
+              <div style={{ marginTop: "10px" }}>
                 <span
                   style={{
-                    fontSize: "0.72rem",
-                    padding: "2px 8px",
+                    fontSize: "0.74rem",
+                    padding: "2px 10px",
                     borderRadius: "999px",
                     background: "rgba(59, 130, 246, 0.1)",
                     color: "#93c5fd",
                     border: "1px solid rgba(59, 130, 246, 0.2)",
+                    fontWeight: 600,
+                  }}
+                >
+                  {branch ? "Branch Verified" : "Academic"}
+                </span>
+              </div>
+            </div>
+          </article>
+
+          {/* Card 2: Graduation Batch */}
+          <article
+            className="panel"
+            style={{
+              padding: "18px 20px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              borderRadius: "12px",
+            }}
+          >
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <div
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "8px",
+                  background: "rgba(16, 185, 129, 0.12)",
+                  border: "1px solid rgba(16, 185, 129, 0.3)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "var(--good)",
+                  fontSize: "1rem",
+                }}
+              >
+                🎓
+              </div>
+              <span style={{ fontSize: "0.78rem", color: "var(--muted)", fontWeight: 600 }}>Graduation Batch</span>
+            </div>
+
+            <div style={{ marginTop: "14px" }}>
+              <h3 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>Batch of {batchYear}</h3>
+              <p style={{ fontSize: "0.8rem", color: "var(--muted)", margin: "3px 0 0" }}>Early Career Placement</p>
+
+              <div style={{ marginTop: "10px" }}>
+                <span
+                  style={{
+                    fontSize: "0.74rem",
+                    padding: "2px 10px",
+                    borderRadius: "999px",
+                    background: "rgba(16, 185, 129, 0.1)",
+                    color: "var(--good)",
+                    border: "1px solid rgba(16, 185, 129, 0.2)",
+                    fontWeight: 600,
                   }}
                 >
                   {parseInt(batchYear, 10) - 4} – {batchYear}
@@ -645,11 +738,11 @@ export function ProfileEditShell({
             </div>
           </article>
 
-          {/* Card 2: Target Role */}
+          {/* Card 3: Current CGPA */}
           <article
             className="panel"
             style={{
-              padding: "16px 18px",
+              padding: "18px 20px",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
@@ -659,110 +752,8 @@ export function ProfileEditShell({
             <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
               <div
                 style={{
-                  width: "34px",
-                  height: "34px",
-                  borderRadius: "8px",
-                  background: "rgba(16, 185, 129, 0.12)",
-                  border: "1px solid rgba(16, 185, 129, 0.3)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "var(--good)",
-                  fontSize: "0.95rem",
-                }}
-              >
-                💼
-              </div>
-              <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600 }}>Target Role</span>
-            </div>
-
-            <div style={{ marginTop: "12px" }}>
-              <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>{preferredRoles[0] || "Software Engineer"}</h3>
-              <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "2px 0 0" }}>Full-time • Entry Level</p>
-              <div style={{ marginTop: "8px" }}>
-                <span
-                  style={{
-                    fontSize: "0.72rem",
-                    padding: "2px 8px",
-                    borderRadius: "999px",
-                    background: "rgba(16, 185, 129, 0.1)",
-                    color: "var(--good)",
-                    border: "1px solid rgba(16, 185, 129, 0.2)",
-                  }}
-                >
-                  Preferred
-                </span>
-              </div>
-            </div>
-          </article>
-
-          {/* Card 3: Location Preference */}
-          <article
-            className="panel"
-            style={{
-              padding: "16px 18px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              borderRadius: "12px",
-            }}
-          >
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <div
-                style={{
-                  width: "34px",
-                  height: "34px",
-                  borderRadius: "8px",
-                  background: "rgba(236, 72, 153, 0.12)",
-                  border: "1px solid rgba(236, 72, 153, 0.3)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#f472b6",
-                  fontSize: "0.95rem",
-                }}
-              >
-                📍
-              </div>
-              <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600 }}>Location Preference</span>
-            </div>
-
-            <div style={{ marginTop: "12px" }}>
-              <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>{preferredLocations[0] || "Bengaluru, India"}</h3>
-              <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "2px 0 0" }}>Open to Remote</p>
-              <div style={{ marginTop: "8px" }}>
-                <span
-                  style={{
-                    fontSize: "0.72rem",
-                    padding: "2px 8px",
-                    borderRadius: "999px",
-                    background: "rgba(168, 85, 247, 0.1)",
-                    color: "#c084fc",
-                    border: "1px solid rgba(168, 85, 247, 0.2)",
-                  }}
-                >
-                  Flexible
-                </span>
-              </div>
-            </div>
-          </article>
-
-          {/* Card 4: Current CGPA */}
-          <article
-            className="panel"
-            style={{
-              padding: "16px 18px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              borderRadius: "12px",
-            }}
-          >
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <div
-                style={{
-                  width: "34px",
-                  height: "34px",
+                  width: "36px",
+                  height: "36px",
                   borderRadius: "8px",
                   background: "rgba(168, 85, 247, 0.12)",
                   border: "1px solid rgba(168, 85, 247, 0.3)",
@@ -770,29 +761,32 @@ export function ProfileEditShell({
                   alignItems: "center",
                   justifyContent: "center",
                   color: "#c084fc",
-                  fontSize: "0.95rem",
+                  fontSize: "1rem",
                 }}
               >
-                📄
+                📊
               </div>
-              <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600 }}>Current CGPA</span>
+              <span style={{ fontSize: "0.78rem", color: "var(--muted)", fontWeight: 600 }}>Academic Standing</span>
             </div>
 
-            <div style={{ marginTop: "12px" }}>
-              <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>{Number.parseFloat(cgpa || "0").toFixed(2)} / 10</h3>
-              <p style={{ fontSize: "0.78rem", color: "var(--muted)", margin: "2px 0 0" }}>Academic Registry</p>
-              <div style={{ marginTop: "8px" }}>
+            <div style={{ marginTop: "14px" }}>
+              <h3 style={{ fontSize: "1.15rem", fontWeight: 800, margin: 0, color: "var(--good)" }}>
+                {cgpa ? `${Number.parseFloat(cgpa || "0").toFixed(2)} / 10` : "Not set"}
+              </h3>
+              <p style={{ fontSize: "0.8rem", color: "var(--muted)", margin: "3px 0 0" }}>Cumulative GPA</p>
+              <div style={{ marginTop: "10px" }}>
                 <span
                   style={{
-                    fontSize: "0.72rem",
-                    padding: "2px 8px",
+                    fontSize: "0.74rem",
+                    padding: "2px 10px",
                     borderRadius: "999px",
-                    background: "rgba(16, 185, 129, 0.1)",
-                    color: "var(--good)",
-                    border: "1px solid rgba(16, 185, 129, 0.2)",
+                    background: "rgba(168, 85, 247, 0.1)",
+                    color: "#c084fc",
+                    border: "1px solid rgba(168, 85, 247, 0.2)",
+                    fontWeight: 600,
                   }}
                 >
-                  Good
+                  CGPA Baseline
                 </span>
               </div>
             </div>
@@ -803,6 +797,7 @@ export function ProfileEditShell({
       {/* ------------------------------------------------------------- */}
       {/* 4. CORE TWO-COLUMN GRID                                       */}
       {/* ------------------------------------------------------------- */}
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
         {/* ========================================================= */}
         {/* LEFT COLUMN: Skills & Work Experience                     */}
@@ -1007,74 +1002,9 @@ export function ProfileEditShell({
                 <strong style={{ color: "var(--text-primary)" }}>{branch}</strong>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255, 255, 255, 0.04)", paddingBottom: "8px" }}>
-                <span style={{ color: "var(--muted)" }}>Graduation Year</span>
-                <strong style={{ color: "var(--text-primary)" }}>{batchYear}</strong>
-              </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ color: "var(--muted)" }}>CGPA</span>
-                <strong style={{ color: "var(--good)" }}>{Number.parseFloat(cgpa || "0").toFixed(2)} / 10</strong>
-              </div>
-            </div>
-          </section>
-
-          {/* Section: Career Preferences */}
-          <section className="panel" style={{ padding: "20px", borderRadius: "12px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
-              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                <div
-                  style={{
-                    width: "32px",
-                    height: "32px",
-                    borderRadius: "8px",
-                    background: "rgba(236, 72, 153, 0.12)",
-                    border: "1px solid rgba(236, 72, 153, 0.3)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#f472b6",
-                    fontSize: "0.9rem",
-                  }}
-                >
-                  🎯
-                </div>
-                <div>
-                  <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0, color: "var(--text-primary)" }}>
-                    Career Preferences
-                  </h3>
-                  <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>What you&apos;re looking for</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveModal("preferences")}
-                className="primary-link ghost-link"
-                style={{ fontSize: "0.78rem", padding: "4px 10px" }}
-              >
-                ✏️ Edit
-              </button>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "0.85rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255, 255, 255, 0.04)", paddingBottom: "8px" }}>
-                <span style={{ color: "var(--muted)" }}>Preferred Job Roles</span>
-                <strong style={{ color: "var(--text-primary)" }}>{preferredRoles.join(", ")}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255, 255, 255, 0.04)", paddingBottom: "8px" }}>
-                <span style={{ color: "var(--muted)" }}>Preferred Locations</span>
-                <strong style={{ color: "var(--text-primary)" }}>{preferredLocations.join(", ")}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255, 255, 255, 0.04)", paddingBottom: "8px" }}>
-                <span style={{ color: "var(--muted)" }}>Preferred Industries</span>
-                <strong style={{ color: "var(--text-primary)" }}>{preferredIndustries.join(", ")}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255, 255, 255, 0.04)", paddingBottom: "8px" }}>
-                <span style={{ color: "var(--muted)" }}>Expected Salary (CTC)</span>
-                <strong style={{ color: "var(--text-primary)" }}>{expectedCtc}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ color: "var(--muted)" }}>Willing to Relocate</span>
-                <strong style={{ color: "var(--good)" }}>{willingToRelocate}</strong>
+                <strong style={{ color: "var(--good)" }}>{cgpa ? `${Number.parseFloat(cgpa || "0").toFixed(2)} / 10` : "Not set"}</strong>
               </div>
             </div>
           </section>
@@ -1084,6 +1014,7 @@ export function ProfileEditShell({
       {/* ------------------------------------------------------------- */}
       {/* MODAL 1: EDIT PROFILE & ACADEMICS                             */}
       {/* ------------------------------------------------------------- */}
+
 
 
       {activeModal === "profile" && (
@@ -1477,144 +1408,9 @@ export function ProfileEditShell({
                   className="primary-link"
                   style={{ padding: "6px 18px", borderRadius: "8px", background: "var(--good)", color: "#022c22", fontWeight: 700 }}
                 >
-                  Add Experience
+                  {isSaving ? "Saving..." : "Add Experience"}
                 </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
-      {/* ------------------------------------------------------------- */}
-      {/* MODAL 4: EDIT CAREER PREFERENCES                             */}
-      {/* ------------------------------------------------------------- */}
-      {activeModal === "preferences" && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0, 0, 0, 0.75)",
-            backdropFilter: "blur(6px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: "16px",
-          }}
-          onClick={() => setActiveModal(null)}
-        >
-          <div
-            className="panel"
-            style={{
-              maxWidth: "500px",
-              width: "100%",
-              borderRadius: "16px",
-              padding: "24px",
-              background: "var(--surface)",
-              border: "1px solid var(--line)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>Edit Career Preferences</h3>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="danger-action-btn"
-                style={{ padding: "2px 8px", borderRadius: "6px", cursor: "pointer" }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSavePreferences} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div>
-                <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: "4px" }}>
-                  Preferred Job Roles (comma-separated)
-                </label>
-                <input
-                  type="text"
-                  value={preferredRoles.join(", ")}
-                  onChange={(e) => setPreferredRoles(e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
-                  className="input-field"
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "var(--surface-alt)", border: "1px solid var(--line)", color: "inherit" }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: "4px" }}>
-                  Preferred Locations (comma-separated)
-                </label>
-                <input
-                  type="text"
-                  value={preferredLocations.join(", ")}
-                  onChange={(e) => setPreferredLocations(e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
-                  className="input-field"
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "var(--surface-alt)", border: "1px solid var(--line)", color: "inherit" }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: "4px" }}>
-                  Preferred Industries (comma-separated)
-                </label>
-                <input
-                  type="text"
-                  value={preferredIndustries.join(", ")}
-                  onChange={(e) => setPreferredIndustries(e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
-                  className="input-field"
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "var(--surface-alt)", border: "1px solid var(--line)", color: "inherit" }}
-                />
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div>
-                  <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: "4px" }}>
-                    Expected Salary (CTC)
-                  </label>
-                  <input
-                    type="text"
-                    value={expectedCtc}
-                    onChange={(e) => setExpectedCtc(e.target.value)}
-                    className="input-field"
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "var(--surface-alt)", border: "1px solid var(--line)", color: "inherit" }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: "4px" }}>
-                    Willing to Relocate
-                  </label>
-                  <select
-                    value={willingToRelocate}
-                    onChange={(e) => setWillingToRelocate(e.target.value)}
-                    className="input-field"
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "var(--surface-alt)", border: "1px solid var(--line)", color: "inherit" }}
-                  >
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                    <option value="Remote Only">Remote Only</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "10px" }}>
-                <button
-                  type="button"
-                  onClick={() => setActiveModal(null)}
-                  className="primary-link ghost-link"
-                  style={{ padding: "6px 14px" }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="primary-link"
-                  style={{ padding: "6px 18px", borderRadius: "8px", background: "var(--good)", color: "#022c22", fontWeight: 700 }}
-                >
-                  Save Preferences
-                </button>
               </div>
             </form>
           </div>
@@ -1623,4 +1419,5 @@ export function ProfileEditShell({
     </div>
   );
 }
+
 

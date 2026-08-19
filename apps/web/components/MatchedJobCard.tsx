@@ -192,21 +192,22 @@ export default function MatchedJobCard({ job, onStatusChange, onToggleSave, onDi
             <button
               type="button"
               onClick={handleDismiss}
-              title="Dismiss this job from your feed"
+              title="Remove this job from your recommendations"
               className="danger-action-btn"
               style={{
-                borderRadius: "999px",
-                padding: "2px 8px",
-                fontSize: "0.72rem",
+                borderRadius: "8px",
+                padding: "3px 8px",
+                fontSize: "0.74rem",
                 cursor: "pointer",
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "3px",
+                gap: "4px",
                 fontWeight: 600,
               }}
             >
-              ✕
+              🚫 Not Interested
             </button>
+
           </div>
         </div>
 

@@ -207,24 +207,22 @@ export default function OpportunityCard({
             <button
               type="button"
               onClick={handleDismiss}
-              title="Dismiss this job from your feed"
+              title="Remove this job from your feed"
+              className="danger-action-btn"
               style={{
-                background: "rgba(239, 68, 68, 0.08)",
-                border: "1px solid rgba(239, 68, 68, 0.25)",
-                color: "#ef4444",
-                borderRadius: "999px",
-                padding: "2px 8px",
-                fontSize: "0.72rem",
+                borderRadius: "8px",
+                padding: "3px 8px",
+                fontSize: "0.74rem",
                 cursor: "pointer",
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "3px",
-                fontWeight: 500,
-                transition: "all 0.15s ease",
+                gap: "4px",
+                fontWeight: 600,
               }}
             >
-              ✕ Dismiss
+              🚫 Not Interested
             </button>
+
           </div>
         </div>
 

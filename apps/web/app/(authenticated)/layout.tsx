@@ -27,25 +27,37 @@ export default async function AuthenticatedLayout({ children }: AuthenticatedLay
     .or(`id.eq.${user.id},college_email.eq.${user.email}`)
     .maybeSingle();
 
-  if (error) {
-    console.error("Layout auth query error:", error);
+  const isProfileComplete = Boolean(
+    student &&
+    student.full_name &&
+    student.branch &&
+    student.cgpa &&
+    (student.college_id || student.custom_institution_name)
+  );
+
+  // If profile is not complete, redirect to /profile
+  if (!isProfileComplete && pathname && pathname !== "/profile" && !pathname.startsWith("/api")) {
+    redirect("/profile");
   }
 
   // 3. Safe fallback profile for first-time profile creation layout view
-  const defaultStudent = student || {
-    id: user.id,
-    full_name: user.email?.split("@")[0] || "New Student",
-    college_email: user.email || "",
-    college_id: null,
-    custom_institution_name: null,
-    institution_source: null,
-    institution_verified: false,
-    branch: "Computer Science",
-    cgpa: "8.0",
-    batch_year: new Date().getFullYear() + 2,
-    colleges: null,
-    is_new: true
-  };
+  const defaultStudent = student
+    ? { ...student, is_new: !isProfileComplete }
+    : {
+        id: user.id,
+        full_name: user.user_metadata?.full_name || user.email?.split("@")[0] || "",
+        college_email: user.email || "",
+        college_id: null,
+        custom_institution_name: null,
+        institution_source: null,
+        institution_verified: false,
+        branch: "",
+        cgpa: "",
+        batch_year: 2027,
+        colleges: null,
+        is_new: true,
+      };
+
 
   return (
     <DashboardShell student={defaultStudent as any} user={user}>
@@ -53,4 +65,5 @@ export default async function AuthenticatedLayout({ children }: AuthenticatedLay
     </DashboardShell>
   );
 }
+
 
