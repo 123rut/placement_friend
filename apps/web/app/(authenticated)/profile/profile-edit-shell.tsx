@@ -184,12 +184,13 @@ export function ProfileEditShell({
     setSaveStatus(null);
 
     const effectiveInstitution = customInstitutionName.trim() || (selectedCollegeId && currentInstitutionName !== "Not selected" ? currentInstitutionName : "");
+    const effectiveBranch = (branch || "Computer Science").trim();
 
     // Validation
     const missing: string[] = [];
     if (!fullName.trim()) missing.push("Full Name");
     if (!effectiveInstitution) missing.push("College / Institution Name");
-    if (!branch.trim()) missing.push("Branch / Stream");
+    if (!effectiveBranch) missing.push("Branch / Stream");
     const numCgpa = parseFloat(cgpa);
     if (!cgpa || isNaN(numCgpa) || numCgpa < 0 || numCgpa > 10) missing.push("Valid CGPA (0.0 - 10.0)");
     const numBatch = parseInt(batchYear, 10);
@@ -201,6 +202,7 @@ export function ProfileEditShell({
       setSaveStatus(msg);
       return;
     }
+
 
     setIsSaving(true);
 
@@ -351,11 +353,14 @@ export function ProfileEditShell({
   const handleSaveProfileDirect = async () => {
     setSaveStatus(null);
 
+    const effectiveInstitution = customInstitutionName.trim() || (selectedCollegeId && currentInstitutionName !== "Not selected" ? currentInstitutionName : "");
+    const effectiveBranch = (branch || "Computer Science").trim();
+
     // Validation
     const missing: string[] = [];
     if (!fullName.trim()) missing.push("Full Name");
-    if (!selectedCollegeId && !customInstitutionName.trim()) missing.push("Institution / College");
-    if (!branch.trim()) missing.push("Branch / Stream");
+    if (!effectiveInstitution) missing.push("Institution / College");
+    if (!effectiveBranch) missing.push("Branch / Stream");
     const numCgpa = parseFloat(cgpa);
     if (!cgpa || isNaN(numCgpa) || numCgpa <= 0 || numCgpa > 10) missing.push("Valid CGPA (0.0 - 10.0)");
     const numBatch = parseInt(batchYear, 10);
@@ -376,14 +381,15 @@ export function ProfileEditShell({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fullName,
-          branch,
+          branch: effectiveBranch,
           cgpa,
           batchYear,
           collegeId: selectedCollegeId,
-          customInstitutionName,
+          customInstitutionName: customInstitutionName.trim() || effectiveInstitution,
           institutionSource: customInstitutionName ? "CUSTOM" : "USER_SELECTED",
         }),
       });
+
 
       if (!studentRes.ok) {
         const errJson = await studentRes.json().catch(() => ({}));
