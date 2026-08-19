@@ -3,8 +3,11 @@
 -- Run this in your Supabase Dashboard -> SQL Editor
 -- ============================================================
 
--- 1. Enable RLS on students
+-- 1. Enable RLS on students and drop email unique constraint
 ALTER TABLE students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE students DROP CONSTRAINT IF EXISTS students_college_email_key;
+DROP INDEX IF EXISTS students_college_email_key;
+
 
 -- 2. Drop old conflicting or partial policies
 DROP POLICY IF EXISTS "student can view own row" ON students;

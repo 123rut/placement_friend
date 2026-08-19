@@ -28,8 +28,9 @@ CREATE TABLE colleges (
 CREATE TABLE students (
   id TEXT PRIMARY KEY,
   full_name TEXT NOT NULL,
-  college_email TEXT NOT NULL UNIQUE,
+  college_email TEXT NOT NULL,
   college_id TEXT REFERENCES colleges(id),
+
   custom_institution_name TEXT,
   institution_source TEXT DEFAULT 'USER_SELECTED',
   institution_verified BOOLEAN NOT NULL DEFAULT FALSE,
