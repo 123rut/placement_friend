@@ -103,59 +103,9 @@ async function handleProfileUpdate(request: NextRequest) {
     const hasServiceKey = Boolean(process.env.NEXT_PRIVATE_SUPABASE_SERVICE_KEY);
     const dbClient = hasServiceKey ? adminDb : supabase;
 
-    // Check if record exists by user.id or college_email
-    let studentById: any = null;
-    let studentByEmail: any = null;
-
-    try {
-      const { data } = await dbClient
-        .from("students")
-        .select("id, college_email")
-        .eq("id", user.id)
-        .maybeSingle();
-      studentById = data;
-    } catch {}
-
-    try {
-      if (user.email) {
-        const { data } = await dbClient
-          .from("students")
-          .select("id, college_email")
-          .eq("college_email", user.email)
-          .maybeSingle();
-        studentByEmail = data;
-      }
-    } catch {}
-
-    if (!studentById && !studentByEmail) {
-      try {
-        const { data } = await supabase
-          .from("students")
-          .select("id, college_email")
-          .eq("id", user.id)
-          .maybeSingle();
-        studentById = data;
-      } catch {}
-      try {
-        if (user.email) {
-          const { data } = await supabase
-            .from("students")
-            .select("id, college_email")
-            .eq("college_email", user.email)
-            .maybeSingle();
-          studentByEmail = data;
-        }
-      } catch {}
-    }
-
-    const existingStudent = studentById || studentByEmail;
-
-    let saveResult: any = null;
-    let saveError: any = null;
-
     const updatePayload: Record<string, any> = {
       full_name: fullName.trim(),
-      college_email: user.email || existingStudent?.college_email || "",
+      college_email: user.email || "",
       college_id: finalCollegeId,
       custom_institution_name: finalCustomName || customInstitutionName || null,
       institution_source: finalSource,
@@ -167,84 +117,75 @@ async function handleProfileUpdate(request: NextRequest) {
       updated_at: new Date().toISOString()
     };
 
-    if (existingStudent) {
-      // Record exists under either this id or this email -> update it
-      let res = await dbClient
-        .from("students")
-        .update({
+    // Step 1: Remove any stale/legacy duplicate rows holding the same email under a different ID
+    if (user.email) {
+      try {
+        await dbClient
+          .from("students")
+          .delete()
+          .eq("college_email", user.email)
+          .neq("id", user.id);
+      } catch {}
+      try {
+        await supabase
+          .from("students")
+          .delete()
+          .eq("college_email", user.email)
+          .neq("id", user.id);
+      } catch {}
+    }
+
+    // Step 2: Conflict-free upsert by user.id
+    let saveResult: any = null;
+    let saveError: any = null;
+
+    let res = await dbClient
+      .from("students")
+      .upsert(
+        {
           id: user.id,
           ...updatePayload
-        })
-        .eq("id", existingStudent.id)
-        .select()
-        .maybeSingle();
+        },
+        { onConflict: "id" }
+      )
+      .select()
+      .maybeSingle();
 
-      if (res.error) {
-        // Fallback update by college_email if updating ID has constraint
-        res = await dbClient
-          .from("students")
-          .update(updatePayload)
-          .eq("college_email", user.email)
-          .select()
-          .maybeSingle();
-      }
-
-      if (res.error) {
-        res = await supabase
-          .from("students")
-          .update(updatePayload)
-          .eq("id", existingStudent.id)
-          .select()
-          .maybeSingle();
-      }
-
-      saveResult = res.data;
-      saveError = res.error;
-    } else {
-      // First try upsert on college_email to avoid unique constraint violations
-      let res = await dbClient
+    if (res.error) {
+      res = await supabase
         .from("students")
         .upsert(
           {
             id: user.id,
             ...updatePayload
           },
-          { onConflict: "college_email" }
+          { onConflict: "id" }
         )
         .select()
         .maybeSingle();
-
-      if (res.error) {
-        res = await dbClient
-          .from("students")
-          .upsert(
-            {
-              id: user.id,
-              ...updatePayload
-            },
-            { onConflict: "id" }
-          )
-          .select()
-          .maybeSingle();
-      }
-
-      if (res.error) {
-        res = await supabase
-          .from("students")
-          .upsert(
-            {
-              id: user.id,
-              ...updatePayload
-            },
-            { onConflict: "id" }
-          )
-          .select()
-          .maybeSingle();
-      }
-
-      saveResult = res.data;
-      saveError = res.error;
     }
+
+    if (res.error) {
+      // Fallback: Direct update by id
+      res = await dbClient
+        .from("students")
+        .update(updatePayload)
+        .eq("id", user.id)
+        .select()
+        .maybeSingle();
+    }
+
+    if (res.error) {
+      res = await supabase
+        .from("students")
+        .update(updatePayload)
+        .eq("id", user.id)
+        .select()
+        .maybeSingle();
+    }
+
+    saveResult = res.data;
+    saveError = res.error;
 
     if (saveError) {
       console.error("Error saving student profile:", saveError.message);
@@ -255,6 +196,7 @@ async function handleProfileUpdate(request: NextRequest) {
       success: true,
       student: saveResult
     });
+
   } catch (error: any) {
     console.error("Student profile update error:", error);
     return NextResponse.json({ error: error?.message || "Internal server error" }, { status: 500 });
