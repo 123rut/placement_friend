@@ -99,12 +99,27 @@ async function handleProfileUpdate(request: NextRequest) {
       finalVerified = false;
     }
 
-    // 3. Persist student profile safely using admin client (bypasses RLS blind spots)
-    const { data: existingStudent } = await adminDb
-      .from("students")
-      .select("id, college_email")
-      .or(`id.eq.${user.id},college_email.eq.${user.email}`)
-      .maybeSingle();
+    // 3. Persist student profile safely using admin client with auth client fallback
+    const hasServiceKey = Boolean(process.env.NEXT_PRIVATE_SUPABASE_SERVICE_KEY);
+    const dbClient = hasServiceKey ? adminDb : supabase;
+
+    // Check if record exists
+    let existingStudent: any = null;
+    try {
+      const { data } = await dbClient
+        .from("students")
+        .select("id, college_email")
+        .or(`id.eq.${user.id},college_email.eq.${user.email}`)
+        .maybeSingle();
+      existingStudent = data;
+    } catch {
+      const { data } = await supabase
+        .from("students")
+        .select("id, college_email")
+        .or(`id.eq.${user.id},college_email.eq.${user.email}`)
+        .maybeSingle();
+      existingStudent = data;
+    }
 
     let saveResult: any;
     let saveError: any;
@@ -113,10 +128,10 @@ async function handleProfileUpdate(request: NextRequest) {
       full_name: fullName.trim(),
       college_email: user.email || existingStudent?.college_email || "",
       college_id: finalCollegeId,
-      custom_institution_name: finalCustomName,
+      custom_institution_name: finalCustomName || customInstitutionName || null,
       institution_source: finalSource,
       institution_verified: finalVerified,
-      branch: branch || "Computer Science",
+      branch: branch?.trim() || "Computer Science",
       cgpa: parsedCgpa,
       batch_year: parsedBatchYear,
       is_verified: finalVerified,
@@ -128,27 +143,47 @@ async function handleProfileUpdate(request: NextRequest) {
         updatePayload.id = user.id;
       }
 
-      const { data, error } = await adminDb
+      let res = await dbClient
         .from("students")
         .update(updatePayload)
         .eq("id", existingStudent.id)
         .select()
-        .single();
+        .maybeSingle();
 
-      saveResult = data;
-      saveError = error;
+      if (res.error) {
+        res = await supabase
+          .from("students")
+          .update(updatePayload)
+          .eq("id", existingStudent.id)
+          .select()
+          .maybeSingle();
+      }
+
+      saveResult = res.data;
+      saveError = res.error;
     } else {
-      const { data, error } = await adminDb
+      let res = await dbClient
         .from("students")
         .insert({
           id: user.id,
           ...updatePayload
         })
         .select()
-        .single();
+        .maybeSingle();
 
-      saveResult = data;
-      saveError = error;
+      if (res.error) {
+        res = await supabase
+          .from("students")
+          .insert({
+            id: user.id,
+            ...updatePayload
+          })
+          .select()
+          .maybeSingle();
+      }
+
+      saveResult = res.data;
+      saveError = res.error;
     }
 
     if (saveError) {
@@ -165,4 +200,5 @@ async function handleProfileUpdate(request: NextRequest) {
     return NextResponse.json({ error: error?.message || "Internal server error" }, { status: 500 });
   }
 }
+
 

@@ -36,10 +36,9 @@ export function ProfileEditShell({
   // -------------------------------------------------------------
   const [profile, setProfile] = useState(initialProfile);
   const [fullName, setFullName] = useState(initialProfile.full_name ?? "");
-  const [branch, setBranch] = useState(initialProfile.branch ?? "");
+  const [branch, setBranch] = useState(initialProfile.branch ?? "Computer Science");
   const [cgpa, setCgpa] = useState(initialProfile.cgpa ? initialProfile.cgpa.toString() : "");
   const [batchYear, setBatchYear] = useState(initialProfile.batch_year?.toString() ?? "2027");
-
 
   // Institution State
   const autoDetectedCollege = useMemo(() => getCollegeByEmail(user.email || ""), [user.email]);
@@ -47,6 +46,8 @@ export function ProfileEditShell({
   const [customInstitutionName, setCustomInstitutionName] = useState<string>(initialProfile.custom_institution_name ?? "");
   const [collegeSearchQuery, setCollegeSearchQuery] = useState("");
   const [isSelectingCollege, setIsSelectingCollege] = useState(!initialProfile.college_id && !initialProfile.custom_institution_name && !autoDetectedCollege);
+  const [modalError, setModalError] = useState<string | null>(null);
+
 
   const filteredColleges = useMemo(() => {
     return filterColleges(colleges, collegeSearchQuery, 20);
@@ -179,38 +180,43 @@ export function ProfileEditShell({
   // -------------------------------------------------------------
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModalError(null);
     setSaveStatus(null);
+
+    const effectiveInstitution = customInstitutionName.trim() || (selectedCollegeId && currentInstitutionName !== "Not selected" ? currentInstitutionName : "");
 
     // Validation
     const missing: string[] = [];
     if (!fullName.trim()) missing.push("Full Name");
-    if (!selectedCollegeId && !customInstitutionName.trim()) missing.push("Institution / College");
+    if (!effectiveInstitution) missing.push("College / Institution Name");
     if (!branch.trim()) missing.push("Branch / Stream");
     const numCgpa = parseFloat(cgpa);
-    if (!cgpa || isNaN(numCgpa) || numCgpa <= 0 || numCgpa > 10) missing.push("Valid CGPA (0.0 - 10.0)");
+    if (!cgpa || isNaN(numCgpa) || numCgpa < 0 || numCgpa > 10) missing.push("Valid CGPA (0.0 - 10.0)");
     const numBatch = parseInt(batchYear, 10);
     if (!batchYear || isNaN(numBatch) || numBatch < 2000 || numBatch > 2100) missing.push("Graduation Batch Year");
 
     if (missing.length > 0) {
-      setSaveStatus(`⚠️ Form Incomplete: Please fill in ${missing.join(", ")}.`);
+      const msg = `⚠️ Please fill in ${missing.join(", ")} before saving.`;
+      setModalError(msg);
+      setSaveStatus(msg);
       return;
     }
 
     setIsSaving(true);
 
     try {
-      // 1. Update students table via server-side API (admin client)
+      // 1. Update students table via server-side API (admin client with fallback)
       const studentRes = await fetch("/api/students/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName,
-          branch,
+          fullName: fullName.trim(),
+          branch: branch.trim() || "Computer Science",
           cgpa,
           batchYear,
-          collegeId: selectedCollegeId,
-          customInstitutionName,
-          institutionSource: customInstitutionName ? "CUSTOM" : "USER_SELECTED",
+          collegeId: selectedCollegeId || null,
+          customInstitutionName: customInstitutionName.trim() || effectiveInstitution,
+          institutionSource: customInstitutionName.trim() ? "CUSTOM" : (selectedCollegeId ? "USER_SELECTED" : "CUSTOM"),
         }),
       });
 
@@ -226,20 +232,32 @@ export function ProfileEditShell({
         cgpa,
         batch_year: batchYear,
         college_id: selectedCollegeId,
-        custom_institution_name: customInstitutionName,
+        custom_institution_name: customInstitutionName.trim() || effectiveInstitution,
+        is_new: false,
       }));
 
       setActiveModal(null);
-      setSaveStatus("✓ Profile saved successfully");
+      setModalError(null);
+      setSaveStatus("✓ All profile changes saved successfully!");
       router.refresh();
-      setTimeout(() => setSaveStatus(null), 3000);
+
+      if (initialProfile?.is_new) {
+        setTimeout(() => {
+          router.push("/dashboard");
+        }, 1000);
+      } else {
+        setTimeout(() => setSaveStatus(null), 4000);
+      }
     } catch (err: any) {
       console.error("Failed to save profile:", err);
-      setSaveStatus(`Error: ${err.message || "Failed to save profile"}`);
+      const errMsg = `Error saving: ${err.message || "Please check your connection"}`;
+      setModalError(errMsg);
+      setSaveStatus(errMsg);
     } finally {
       setIsSaving(false);
     }
   };
+
 
 
   const handleAddSkill = () => {
@@ -966,30 +984,44 @@ export function ProfileEditShell({
         {/* ========================================================= */}
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           {/* Section: Academic Details */}
+
           <section className="panel" style={{ padding: "20px", borderRadius: "12px" }}>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "16px" }}>
-              <div
-                style={{
-                  width: "32px",
-                  height: "32px",
-                  borderRadius: "8px",
-                  background: "rgba(59, 130, 246, 0.12)",
-                  border: "1px solid rgba(59, 130, 246, 0.3)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#60a5fa",
-                  fontSize: "0.9rem",
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <div
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "8px",
+                    background: "rgba(59, 130, 246, 0.12)",
+                    border: "1px solid rgba(59, 130, 246, 0.3)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#60a5fa",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  🎓
+                </div>
+                <div>
+                  <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0, color: "var(--text-primary)" }}>
+                    Academic Details
+                  </h3>
+                  <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>Your education journey</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalError(null);
+                  setActiveModal("profile");
                 }}
+                className="primary-link ghost-link"
+                style={{ fontSize: "0.78rem", padding: "4px 10px", cursor: "pointer" }}
               >
-                🎓
-              </div>
-              <div>
-                <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0, color: "var(--text-primary)" }}>
-                  Academic Details
-                </h3>
-                <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>Your education journey</span>
-              </div>
+                ✏️ Edit
+              </button>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "0.85rem" }}>
@@ -1015,10 +1047,7 @@ export function ProfileEditShell({
       {/* MODAL 1: EDIT PROFILE & ACADEMICS                             */}
       {/* ------------------------------------------------------------- */}
 
-
-
       {activeModal === "profile" && (
-
         <div
           style={{
             position: "fixed",
@@ -1028,10 +1057,14 @@ export function ProfileEditShell({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            zIndex: 1000,
+            zIndex: 9999,
             padding: "16px",
+            pointerEvents: "auto",
           }}
-          onClick={() => setActiveModal(null)}
+          onClick={() => {
+            setActiveModal(null);
+            setModalError(null);
+          }}
         >
           <div
             className="panel"
@@ -1042,6 +1075,9 @@ export function ProfileEditShell({
               padding: "24px",
               background: "var(--surface)",
               border: "1px solid var(--line)",
+              position: "relative",
+              zIndex: 10000,
+              pointerEvents: "auto",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1049,7 +1085,10 @@ export function ProfileEditShell({
               <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>Edit Academic Profile</h3>
               <button
                 type="button"
-                onClick={() => setActiveModal(null)}
+                onClick={() => {
+                  setActiveModal(null);
+                  setModalError(null);
+                }}
                 className="danger-action-btn"
                 style={{ padding: "2px 8px", borderRadius: "6px", cursor: "pointer" }}
               >
@@ -1057,7 +1096,7 @@ export function ProfileEditShell({
               </button>
             </div>
 
-            <form onSubmit={handleSaveProfile} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <form onSubmit={handleSaveProfile} noValidate style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div>
                 <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: "4px" }}>
                   Full Name
@@ -1068,7 +1107,6 @@ export function ProfileEditShell({
                   onChange={(e) => setFullName(e.target.value)}
                   className="input-field"
                   style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "var(--surface-alt)", border: "1px solid var(--line)", color: "inherit" }}
-                  required
                 />
               </div>
 
@@ -1078,8 +1116,10 @@ export function ProfileEditShell({
                 </label>
                 <input
                   type="text"
-                  value={customInstitutionName}
-                  onChange={(e) => setCustomInstitutionName(e.target.value)}
+                  value={customInstitutionName || (selectedCollegeId && currentInstitutionName !== "Not selected" ? currentInstitutionName : "")}
+                  onChange={(e) => {
+                    setCustomInstitutionName(e.target.value);
+                  }}
                   placeholder="e.g. BITS Pilani"
                   className="input-field"
                   style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "var(--surface-alt)", border: "1px solid var(--line)", color: "inherit" }}
@@ -1092,7 +1132,7 @@ export function ProfileEditShell({
                     Branch / Major
                   </label>
                   <select
-                    value={branch}
+                    value={branch || "Computer Science"}
                     onChange={(e) => setBranch(e.target.value)}
                     className="input-field"
                     style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "var(--surface-alt)", border: "1px solid var(--line)", color: "inherit" }}
@@ -1133,24 +1173,54 @@ export function ProfileEditShell({
                   onChange={(e) => setCgpa(e.target.value)}
                   className="input-field"
                   style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "var(--surface-alt)", border: "1px solid var(--line)", color: "inherit" }}
-                  required
                 />
               </div>
+
+              {modalError && (
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    background: "rgba(245, 158, 11, 0.15)",
+                    border: "1px solid rgba(245, 158, 11, 0.4)",
+                    color: "#fbbf24",
+                    fontSize: "0.82rem",
+                    fontWeight: 600,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  {modalError}
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "10px" }}>
                 <button
                   type="button"
-                  onClick={() => setActiveModal(null)}
+                  onClick={() => {
+                    setActiveModal(null);
+                    setModalError(null);
+                  }}
                   className="primary-link ghost-link"
-                  style={{ padding: "6px 14px" }}
+                  style={{ padding: "6px 14px", cursor: "pointer" }}
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={(e) => handleSaveProfile(e as any)}
                   disabled={isSaving}
                   className="primary-link"
-                  style={{ padding: "6px 18px", borderRadius: "8px", background: "var(--good)", color: "#022c22", fontWeight: 700 }}
+                  style={{
+                    padding: "8px 20px",
+                    borderRadius: "8px",
+                    background: "var(--good)",
+                    color: "#022c22",
+                    fontWeight: 700,
+                    cursor: isSaving ? "not-allowed" : "pointer",
+                    opacity: isSaving ? 0.7 : 1,
+                  }}
                 >
                   {isSaving ? "Saving..." : "Save Changes"}
                 </button>
@@ -1163,6 +1233,7 @@ export function ProfileEditShell({
       {/* ------------------------------------------------------------- */}
       {/* MODAL 2: EDIT SKILLS                                          */}
       {/* ------------------------------------------------------------- */}
+
       {activeModal === "skills" && (
         <div
           style={{
@@ -1173,8 +1244,9 @@ export function ProfileEditShell({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            zIndex: 1000,
+            zIndex: 9999,
             padding: "16px",
+            pointerEvents: "auto",
           }}
           onClick={() => setActiveModal(null)}
         >
@@ -1187,6 +1259,9 @@ export function ProfileEditShell({
               padding: "24px",
               background: "var(--surface)",
               border: "1px solid var(--line)",
+              position: "relative",
+              zIndex: 10000,
+              pointerEvents: "auto",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1221,7 +1296,7 @@ export function ProfileEditShell({
                 type="button"
                 onClick={handleAddSkill}
                 className="primary-link"
-                style={{ padding: "8px 16px", borderRadius: "8px" }}
+                style={{ padding: "8px 16px", borderRadius: "8px", cursor: "pointer" }}
               >
                 Add
               </button>
@@ -1260,7 +1335,7 @@ export function ProfileEditShell({
                 type="button"
                 onClick={() => setActiveModal(null)}
                 className="primary-link ghost-link"
-                style={{ padding: "6px 14px" }}
+                style={{ padding: "6px 14px", cursor: "pointer" }}
               >
                 Cancel
               </button>
@@ -1269,7 +1344,15 @@ export function ProfileEditShell({
                 onClick={handleSaveSkills}
                 disabled={isSaving}
                 className="primary-link"
-                style={{ padding: "6px 18px", borderRadius: "8px", background: "var(--good)", color: "#022c22", fontWeight: 700 }}
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: "8px",
+                  background: "var(--good)",
+                  color: "#022c22",
+                  fontWeight: 700,
+                  cursor: isSaving ? "not-allowed" : "pointer",
+                  opacity: isSaving ? 0.7 : 1,
+                }}
               >
                 {isSaving ? "Saving..." : "Save Skills"}
               </button>
@@ -1291,8 +1374,9 @@ export function ProfileEditShell({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            zIndex: 1000,
+            zIndex: 9999,
             padding: "16px",
+            pointerEvents: "auto",
           }}
           onClick={() => setActiveModal(null)}
         >
@@ -1305,6 +1389,9 @@ export function ProfileEditShell({
               padding: "24px",
               background: "var(--surface)",
               border: "1px solid var(--line)",
+              position: "relative",
+              zIndex: 10000,
+              pointerEvents: "auto",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1399,18 +1486,25 @@ export function ProfileEditShell({
                   type="button"
                   onClick={() => setActiveModal(null)}
                   className="primary-link ghost-link"
-                  style={{ padding: "6px 14px" }}
+                  style={{ padding: "6px 14px", cursor: "pointer" }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   className="primary-link"
-                  style={{ padding: "6px 18px", borderRadius: "8px", background: "var(--good)", color: "#022c22", fontWeight: 700 }}
+                  style={{
+                    padding: "8px 20px",
+                    borderRadius: "8px",
+                    background: "var(--good)",
+                    color: "#022c22",
+                    fontWeight: 700,
+                    cursor: isSaving ? "not-allowed" : "pointer",
+                    opacity: isSaving ? 0.7 : 1,
+                  }}
                 >
                   {isSaving ? "Saving..." : "Add Experience"}
                 </button>
-
               </div>
             </form>
           </div>
