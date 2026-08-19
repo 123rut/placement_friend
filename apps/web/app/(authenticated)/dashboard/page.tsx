@@ -35,14 +35,26 @@ export default async function DashboardPage() {
   }
 
   // 2. Query student profile
-  const { data: student } = await supabase
+  let student: any = null;
+  const { data: authStudent } = await supabase
     .from("students")
     .select("*")
     .eq("id", user.id)
     .maybeSingle();
 
+  student = authStudent;
+
+  if (!student && user.email) {
+    const { data: emailStudent } = await supabase
+      .from("students")
+      .select("*")
+      .eq("college_email", user.email)
+      .maybeSingle();
+    student = emailStudent;
+  }
+
   if (!student) {
-    redirect("/");
+    redirect("/profile");
   }
 
   // 3. Query tracked company IDs
@@ -54,19 +66,21 @@ export default async function DashboardPage() {
   const trackedCompanyIds = (targets || []).map((t) => t.company_id);
   const targetsCount = trackedCompanyIds.length;
 
-  // 4. Load experience details server-side from Nest API to calculate profile completeness
-  let experiences = [];
+  // 4. Load experience details server-side from candidate_profiles
+  let experiences: any[] = [];
   try {
-    const res = await fetch(`${getCareerPilotApiBaseUrl()}/resume/${user.id}`, {
-      cache: "no-store",
-    });
-    if (res.ok) {
-      const resumeData = await res.json();
-      experiences = resumeData.experience || [];
+    const { data: cand } = await supabase
+      .from("candidate_profiles")
+      .select("experience")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (cand && Array.isArray(cand.experience)) {
+      experiences = cand.experience;
     }
   } catch (err) {
-    console.error("Failed to load experiences server-side:", err);
+    console.error("Failed to load experiences from database:", err);
   }
+
 
   // Calculate completeness:
   let completeness = 0;

@@ -12,15 +12,28 @@ export default async function OpportunitiesPage() {
   }
 
   // 2. Query student profile from the database
-  const { data: student } = await supabase
+  let student: any = null;
+  const { data: authStudent } = await supabase
     .from("students")
     .select("*")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (!student) {
-    redirect("/");
+  student = authStudent;
+
+  if (!student && user.email) {
+    const { data: emailStudent } = await supabase
+      .from("students")
+      .select("*")
+      .eq("college_email", user.email)
+      .maybeSingle();
+    student = emailStudent;
   }
+
+  if (!student) {
+    redirect("/profile");
+  }
+
 
   return (
     <OpportunitiesClient student={student as any} />

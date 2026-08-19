@@ -25,24 +25,29 @@ export default async function HomePage() {
 
     if (user) {
       console.log("Step 3: Querying students table");
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from("students")
         .select("*")
         .eq("id", user.id)
         .maybeSingle();
 
-      if (profileError) {
-        console.error("Student query error:", profileError);
-        throw profileError;
+      studentProfile = profile;
+
+      if (!studentProfile && user.email) {
+        const { data: emailProfile } = await supabase
+          .from("students")
+          .select("*")
+          .eq("college_email", user.email)
+          .maybeSingle();
+        studentProfile = emailProfile;
       }
 
-      console.log("Profile exists:", !!profile);
-      studentProfile = profile;
+      console.log("Profile exists:", !!studentProfile);
     }
   } catch (err) {
     console.error("HOME PAGE ERROR:", err);
-    throw err;
   }
+
 
   // Handle redirects outside the try-catch block so Next.js redirect errors are not caught
   if (!user) {

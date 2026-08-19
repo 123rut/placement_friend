@@ -13,15 +13,28 @@ export default async function WatchlistPage() {
   }
 
   // 2. Query student profile
-  const { data: student } = await supabase
+  let student: any = null;
+  const { data: authStudent } = await supabase
     .from("students")
     .select("id")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (!student) {
-    redirect("/");
+  student = authStudent;
+
+  if (!student && user.email) {
+    const { data: emailStudent } = await supabase
+      .from("students")
+      .select("id")
+      .eq("college_email", user.email)
+      .maybeSingle();
+    student = emailStudent;
   }
+
+  if (!student) {
+    redirect("/profile");
+  }
+
 
   return (
     <WatchlistClient

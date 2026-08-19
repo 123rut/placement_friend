@@ -5,13 +5,9 @@ export function getCareerPilotApiBaseUrl() {
 }
 
 function getInternalApiKey() {
-  const key = process.env.INTERNAL_API_KEY;
-  if (!key && process.env.NODE_ENV === "production") {
-    throw new Error("INTERNAL_API_KEY must be set in production.");
-  }
-
-  return key ?? "";
+  return process.env.INTERNAL_API_KEY ?? "";
 }
+
 
 export function getInternalHeaders(
   extra: HeadersInit = {},
