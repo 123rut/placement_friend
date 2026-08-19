@@ -100,7 +100,12 @@ async function handleProfileUpdate(request: NextRequest) {
     }
 
     // 3. Persist student profile safely using admin client with auth client fallback
-    const hasServiceKey = Boolean(process.env.NEXT_PRIVATE_SUPABASE_SERVICE_KEY);
+    const hasServiceKey = Boolean(
+      process.env.NEXT_PRIVATE_SUPABASE_SERVICE_KEY ||
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.SUPABASE_SERVICE_KEY ||
+      process.env.SUPABASE_SECRET_KEY
+    );
     const dbClient = hasServiceKey ? adminDb : supabase;
 
     const updatePayload: Record<string, any> = {
@@ -117,42 +122,60 @@ async function handleProfileUpdate(request: NextRequest) {
       updated_at: new Date().toISOString()
     };
 
-    // Step 1: Remove any stale/legacy duplicate rows holding the same email under a different ID
-    if (user.email) {
-      try {
-        await dbClient
-          .from("students")
-          .delete()
-          .eq("college_email", user.email)
-          .neq("id", user.id);
-      } catch {}
-      try {
-        await supabase
-          .from("students")
-          .delete()
-          .eq("college_email", user.email)
-          .neq("id", user.id);
-      } catch {}
-    }
-
-    // Step 2: Conflict-free upsert by user.id
     let saveResult: any = null;
     let saveError: any = null;
 
-    let res = await dbClient
-      .from("students")
-      .upsert(
-        {
+    // Check if a student already exists with this user id or email
+    let existingStudent: any = null;
+    if (user.id) {
+      try {
+        const { data } = await dbClient.from("students").select("id").eq("id", user.id).maybeSingle();
+        if (data) existingStudent = data;
+      } catch {}
+    }
+    if (!existingStudent && user.email) {
+      try {
+        const { data } = await dbClient.from("students").select("id").eq("college_email", user.email).maybeSingle();
+        if (data) existingStudent = data;
+      } catch {}
+    }
+
+    if (existingStudent) {
+      // In-place update to avoid any unique constraint conflicts
+      let res = await dbClient
+        .from("students")
+        .update({
           id: user.id,
           ...updatePayload
-        },
-        { onConflict: "id" }
-      )
-      .select()
-      .maybeSingle();
+        })
+        .eq("id", existingStudent.id)
+        .select()
+        .maybeSingle();
 
-    if (res.error) {
-      res = await supabase
+      if (res.error) {
+        // Fallback update without updating id if id modification is restricted
+        res = await dbClient
+          .from("students")
+          .update(updatePayload)
+          .eq("id", existingStudent.id)
+          .select()
+          .maybeSingle();
+      }
+
+      if (res.error && user.email) {
+        res = await supabase
+          .from("students")
+          .update(updatePayload)
+          .eq("college_email", user.email)
+          .select()
+          .maybeSingle();
+      }
+
+      saveResult = res.data;
+      saveError = res.error;
+    } else {
+      // First try upsert on id
+      let res = await dbClient
         .from("students")
         .upsert(
           {
@@ -163,29 +186,25 @@ async function handleProfileUpdate(request: NextRequest) {
         )
         .select()
         .maybeSingle();
+
+      if (res.error) {
+        res = await supabase
+          .from("students")
+          .upsert(
+            {
+              id: user.id,
+              ...updatePayload
+            },
+            { onConflict: "id" }
+          )
+          .select()
+          .maybeSingle();
+      }
+
+      saveResult = res.data;
+      saveError = res.error;
     }
 
-    if (res.error) {
-      // Fallback: Direct update by id
-      res = await dbClient
-        .from("students")
-        .update(updatePayload)
-        .eq("id", user.id)
-        .select()
-        .maybeSingle();
-    }
-
-    if (res.error) {
-      res = await supabase
-        .from("students")
-        .update(updatePayload)
-        .eq("id", user.id)
-        .select()
-        .maybeSingle();
-    }
-
-    saveResult = res.data;
-    saveError = res.error;
 
     if (saveError) {
       console.error("Error saving student profile:", saveError.message);
