@@ -21,6 +21,9 @@ export async function GET() {
       cache: "no-store",
     });
     const data = await readUpstreamBody(response);
+    if (response.ok && data && !data.error && (data.skills || data.id)) {
+      return NextResponse.json({ success: true, profile: data }, { status: response.status });
+    }
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
     logRouteError("careerpilot/resume GET", error);

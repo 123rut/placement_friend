@@ -60,8 +60,11 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
     try {
       const res = await fetch("/api/careerpilot/resume");
       const data = await res.json();
-      if (res.ok && data.profile) {
-        setProfile(data.profile);
+      if (res.ok) {
+        const loadedProfile = data.profile || (data.skills || data.id ? data : null);
+        if (loadedProfile && (loadedProfile.skills || loadedProfile.experience || loadedProfile.education)) {
+          setProfile(loadedProfile);
+        }
       }
     } catch {
       // Keep panel usable
@@ -94,10 +97,11 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
       if (!res.ok) {
         setError(data.error || "Resume upload failed.");
       } else {
-        setProfile(data.profile || null);
+        const loadedProfile = data.profile || (data.skills || data.id ? data : null);
+        setProfile(loadedProfile);
         setError("");
         await onSyncComplete?.();
-        if (!data.profile) {
+        if (!loadedProfile) {
           await loadProfile();
         }
       }

@@ -112879,7 +112879,7 @@ Voice:
 Workflow rules:
 1. Decide whether tools are needed from the user's actual intent. Do not run a fixed pipeline.
 2. For general technical questions, explanations, definitions, and casual conversation, answer directly without tools.
-3. Use read_resume only when the user's profile is needed, such as resume review, career advice, personalized preparation, skill gaps, or job fit.
+3. Use read_resume whenever the user asks about their resume, profile, background, skills, strengths, project suggestions, career roadmap, or personalized job recommendations. ALWAYS call read_resume first to inspect their existing saved profile in the database before asking them to upload or provide a resume.
 4. Use search_jobs only when the user is actually looking for jobs or opportunities.
 5. Use compute_match only after search_jobs returns candidate jobs or the user gives a specific job id.
 6. Use get_skill_gap only when the user asks about gaps, roadmaps, improvement, or after evaluating a specific target role.

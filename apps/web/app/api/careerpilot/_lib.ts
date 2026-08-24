@@ -1,7 +1,17 @@
 import { createClient } from "../../../lib/supabase/server";
 
 export function getCareerPilotApiBaseUrl() {
-  return process.env.CAREERPILOT_API_URL ?? "http://127.0.0.1:4000/api";
+  let url =
+    process.env.CAREERPILOT_API_URL?.trim() ||
+    "http://127.0.0.1:4000/api";
+
+  url = url.replace(/\/+$/, "");
+
+  if (!url.endsWith("/api")) {
+    url = `${url}/api`;
+  }
+
+  return url;
 }
 
 function getInternalApiKey() {
@@ -86,4 +96,4 @@ export async function proxyOpportunityAction(
     logRouteError(`opportunities/:id/${action} POST`, error);
     return structuredError("CareerPilot API is not reachable.", 503);
   }
-}
+}
