@@ -155,17 +155,17 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
         const next = { ...prev };
         matchedJobs.forEach((m) => {
           const actualId = m.job_id || m.id;
-          if (!next[actualId]) {
+          if (actualId && !next[actualId]) {
             next[actualId] = {
               jobId: actualId,
-              jobTitle: m.title,
-              company: m.company_name,
-              matchScore: m.match_score,
+              jobTitle: m.title || m.role || "Role",
+              company: m.company_name || "",
+              matchScore: m.match_score ?? m.matchScore ?? null,
               eligible: true,
               explanation: m.explanation || "",
               strengths: m.strengths || [],
-              missingSkills: m.missing_skills || [],
-              applyUrl: m.url,
+              missingSkills: m.missing_skills || m.missingSkills || [],
+              applyUrl: m.url || m.apply_url || "#",
             };
           }
         });
@@ -201,20 +201,21 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
   const filteredRecommendedJobs = useMemo(() => {
     return matchedJobs
       .filter((job) => {
-        if (selectedCompany !== "all" && job.company_name.toLowerCase() !== selectedCompany.toLowerCase()) {
+        if (selectedCompany !== "all" && job.company_name?.toLowerCase() !== selectedCompany.toLowerCase()) {
           return false;
         }
-        if (hideSeniorRoles && isSeniorRole(job.title)) {
+        const jobTitle = job.title || job.role || "";
+        if (hideSeniorRoles && isSeniorRole(jobTitle)) {
           return false;
         }
         if (minMatchScore !== "all") {
-          const score = job.match_score ?? 0;
+          const score = job.match_score ?? job.matchScore ?? 0;
           if (score < minMatchScore) return false;
         }
         if (inFeedSearch.trim()) {
           const q = inFeedSearch.toLowerCase().trim();
-          const matchTitle = job.title.toLowerCase().includes(q);
-          const matchCompany = job.company_name.toLowerCase().includes(q);
+          const matchTitle = jobTitle.toLowerCase().includes(q);
+          const matchCompany = (job.company_name || "").toLowerCase().includes(q);
           const matchLocation = (job.location || "").toLowerCase().includes(q);
           if (!matchTitle && !matchCompany && !matchLocation) return false;
         }
@@ -222,10 +223,12 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
       })
       .sort((a, b) => {
         if (recommendedSortBy === "best_match") {
-          return (b.match_score ?? 0) - (a.match_score ?? 0);
+          const scoreA = a.match_score ?? a.matchScore ?? 0;
+          const scoreB = b.match_score ?? b.matchScore ?? 0;
+          return scoreB - scoreA;
         }
         if (recommendedSortBy === "company") {
-          return a.company_name.localeCompare(b.company_name);
+          return (a.company_name || "").localeCompare(b.company_name || "");
         }
         return 0;
       });
@@ -1132,7 +1135,7 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
                   const scoreVal = isEligible ? Math.round(scoreDetail.matchScore!) : null;
                   const isScoringThis = scoringJobId === job.id;
                   const isSaved = savedJobsList.some(
-                    (s) => (s.job_id || s.id) === (job.job_id || job.id) && s.is_saved
+                    (s) => (s.job_id || s.id) === job.id && s.is_saved
                   );
 
                   return (
