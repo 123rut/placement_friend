@@ -64,15 +64,31 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
     { revalidateOnFocus: false }
   );
 
-  const matchedJobs: MatchedJobData[] = useMemo(
-    () => (Array.isArray(matchedJobsData) ? matchedJobsData : []),
-    [matchedJobsData],
-  );
-
   const savedJobsList: MatchedJobData[] = useMemo(
     () => (savedData?.data && Array.isArray(savedData.data) ? savedData.data : []),
     [savedData],
   );
+
+  const matchedJobs: MatchedJobData[] = useMemo(() => {
+    if (!Array.isArray(matchedJobsData)) return [];
+    const savedMap = new Map<string, MatchedJobData>();
+    savedJobsList.forEach((s) => {
+      const sId = s.job_id || s.id;
+      if (sId) savedMap.set(sId, s);
+    });
+
+    return matchedJobsData.map((job) => {
+      const id = job.job_id || job.id;
+      const savedInfo = id ? savedMap.get(id) : undefined;
+      return {
+        ...job,
+        is_saved: typeof job.is_saved === "boolean" ? job.is_saved : (savedInfo?.is_saved ?? false),
+        status: job.status && job.status !== "NOT_VIEWED" ? job.status : (savedInfo?.status ?? job.status ?? "NOT_VIEWED"),
+        applied_at: job.applied_at || savedInfo?.applied_at || null,
+        saved_at: job.saved_at || savedInfo?.saved_at || null,
+      };
+    });
+  }, [matchedJobsData, savedJobsList]);
 
   const loading = !matchedJobsData && !matchedError;
 
@@ -339,19 +355,26 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
           }
           const matchItem = matchedJobs.find((m) => m.id === jobId || m.job_id === jobId);
           const searchItem = dbSearchResults.find((s) => s.id === jobId);
-          const newItem: MatchedJobData = matchItem || {
-            id: jobId,
-            title: searchItem?.title || "Role",
-            url: searchItem?.url || "#",
-            location: searchItem?.location || null,
-            company_name: searchItem?.company_name || "",
-            match_score: dbScoredMap[jobId]?.matchScore ?? null,
-            explanation: dbScoredMap[jobId]?.explanation ?? null,
-            strengths: dbScoredMap[jobId]?.strengths ?? null,
-            missing_skills: dbScoredMap[jobId]?.missingSkills ?? null,
-            is_saved: true,
-            status: "VIEWED",
-          };
+          const newItem: MatchedJobData = matchItem
+            ? { ...matchItem, is_saved: true }
+            : {
+                id: jobId,
+                job_id: jobId,
+                title: searchItem?.title || "Role",
+                role: searchItem?.title || "Role",
+                url: searchItem?.url || "#",
+                apply_url: searchItem?.url || "#",
+                location: searchItem?.location || null,
+                company_name: searchItem?.company_name || "",
+                match_score: dbScoredMap[jobId]?.matchScore ?? null,
+                matchScore: dbScoredMap[jobId]?.matchScore ?? null,
+                explanation: dbScoredMap[jobId]?.explanation ?? null,
+                strengths: dbScoredMap[jobId]?.strengths ?? null,
+                missing_skills: dbScoredMap[jobId]?.missingSkills ?? null,
+                missingSkills: dbScoredMap[jobId]?.missingSkills ?? null,
+                is_saved: true,
+                status: "VIEWED",
+              };
           return {
             ...current,
             data: [newItem, ...current.data],
@@ -1108,7 +1131,9 @@ export default function OpportunitiesClient({ student }: OpportunitiesClientProp
                   const isEligible = isScored && scoreDetail.eligible !== false && typeof scoreDetail.matchScore === "number";
                   const scoreVal = isEligible ? Math.round(scoreDetail.matchScore!) : null;
                   const isScoringThis = scoringJobId === job.id;
-                  const isSaved = savedJobsList.some((s) => (s.job_id || s.id) === job.id && s.is_saved);
+                  const isSaved = savedJobsList.some(
+                    (s) => (s.job_id || s.id) === (job.job_id || job.id) && s.is_saved
+                  );
 
                   return (
                     <article

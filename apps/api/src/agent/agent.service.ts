@@ -4,6 +4,7 @@ import { AgentChatResponse, ConversationMessage } from "../careerpilot.types";
 import { DB_POOL } from "../db/db.module";
 import { JobsService } from "../jobs/jobs.service";
 import { ResumeService } from "../resume/resume.service";
+import { PortalService } from "../portal/portal.service";
 import { fetchWithRetry } from "../utils/fetch-retry";
 import { fetchGroqWithRotation } from "../utils/groq-keys";
 
@@ -26,13 +27,10 @@ const TOOL_DEFINITIONS: AgentToolDefinition[] = [
     type: "function",
     function: {
       name: "read_resume",
-      description: "Read the candidate profile from the database. Use only when the user's profile, resume, experience, goals, or saved preferences are needed.",
+      description: "Read the currently authenticated candidate's profile and resume from the database. Call this whenever the user asks about their skills, background, experience, or personalized recommendations.",
       parameters: {
         type: "object",
-        properties: {
-          userId: { type: "string", description: "The user's UUID" },
-        },
-        required: ["userId"],
+        properties: {},
       },
     },
   },
@@ -40,14 +38,14 @@ const TOOL_DEFINITIONS: AgentToolDefinition[] = [
     type: "function",
     function: {
       name: "search_jobs",
-      description: "Search jobs using the existing job cache and semantic matching when embeddings exist.",
+      description: "Search open job opportunities from the catalog.",
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string" },
-          location: { type: "string" },
+          query: { type: "string", description: "Search query, technology, or role title" },
+          location: { type: "string", description: "Optional location filter" },
           employmentType: { type: "string", enum: ["fulltime", "internship", "contract"] },
-          limit: { type: "number" },
+          limit: { type: "number", description: "Number of jobs to return (default 8)" },
         },
         required: ["query"],
       },
@@ -57,14 +55,13 @@ const TOOL_DEFINITIONS: AgentToolDefinition[] = [
     type: "function",
     function: {
       name: "compute_match",
-      description: "Compute a job match score for a specific job and candidate.",
+      description: "Compute a job match score for a specific job against the candidate's profile.",
       parameters: {
         type: "object",
         properties: {
-          userId: { type: "string" },
-          jobId: { type: "string" },
+          jobId: { type: "string", description: "The UUID of the job to match" },
         },
-        required: ["userId", "jobId"],
+        required: ["jobId"],
       },
     },
   },
@@ -72,14 +69,27 @@ const TOOL_DEFINITIONS: AgentToolDefinition[] = [
     type: "function",
     function: {
       name: "get_skill_gap",
-      description: "Identify missing skills for a target role and propose a short roadmap.",
+      description: "Identify missing skills and learning roadmap for a target role.",
       parameters: {
         type: "object",
         properties: {
-          userId: { type: "string" },
-          targetRole: { type: "string" },
+          targetRole: { type: "string", description: "Target job title or role name" },
         },
-        required: ["userId", "targetRole"],
+        required: ["targetRole"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "save_job",
+      description: "Save or bookmark a job opportunity into the candidate's saved pipeline in the database.",
+      parameters: {
+        type: "object",
+        properties: {
+          jobId: { type: "string", description: "The UUID of the job to save" },
+        },
+        required: ["jobId"],
       },
     },
   },
@@ -87,7 +97,8 @@ const TOOL_DEFINITIONS: AgentToolDefinition[] = [
 
 const SYSTEM_PROMPT = `You are CareerPilot, an AI career assistant for software engineers.
 
-Voice:
+Voice & Language:
+- Language: ALWAYS write all responses, explanations, summaries, and advice strictly in clear, fluent English. Even if a job posting, company name, resume excerpt, or scraper text is in another language (e.g. German, French, Dutch, etc.), translate relevant context and respond 100% in English.
 - Sound like a thoughtful career coach, not a database report.
 - Use natural, encouraging language without overpromising.
 - Start with the user's situation, then give the best options and next step.
@@ -100,18 +111,20 @@ Workflow rules:
 4. Use search_jobs only when the user is actually looking for jobs or opportunities.
 5. Use compute_match only after search_jobs returns candidate jobs or the user gives a specific job id.
 6. Use get_skill_gap only when the user asks about gaps, roadmaps, improvement, or after evaluating a specific target role.
-7. After tool results, continue reasoning and either call another useful tool or produce the final answer.
-8. Keep answers practical, concise, and specific.
-9. If a tool returns null or an error, explain the missing prerequisite and continue helpfully instead of pretending the tool succeeded.
-10. Never say that you searched jobs, scored matches, or read a resume unless a tool result in the conversation shows that happened.
-11. When recommending jobs, you MUST format each job using this exact structure:
-- [<title>](<url>) at <company> <!-- fit-id: <id> -->
-
-Rules:
-- If "url" is missing or empty for a job, render the title as plain text (no brackets/link).
-- Never print or display any UUIDs, requisition codes, or job numbers (such as Job ID, System ID, or Job Code) in plain visible text.
-- Always include the comment \`<!-- fit-id: <id> -->\` exactly as shown at the end of each recommended job line if the id exists.
-- Never invent, guess, or fabricate a URL. Only use values provided in the retrieved job data.`;
+7. Use save_job when the user asks to save, bookmark, or track a job from the search results or recommendations into their application pipeline.
+8. After tool results, continue reasoning and either call another useful tool or produce the final answer.
+9. Keep answers practical, concise, and specific.
+10. If a tool returns null or an error, explain the missing prerequisite and continue helpfully instead of pretending the tool succeeded.
+11. Never say that you searched jobs, scored matches, or read a resume unless a tool result in the conversation shows that happened.
+12. When recommending or listing jobs, you MUST include the clickable apply link from the tool results for each job:
+- Format each job as: - [Job Title](url) at Company
+- If the tool result has a "url" or "applyUrl", you MUST use it in the markdown link [Title](url).
+- If "url" is missing or empty, render the title in plain text without brackets.
+- Never invent or fabricate URLs. Only use the real "url" returned by search_jobs or compute_match.
+13. Seniority & Experience Constraint:
+- If the candidate is a college student, fresher, intern, new graduate, or entry-level candidate (e.g. batch 2025/2026/2027/2028 or <= 2 years experience), DO NOT recommend or suggest Senior, Lead, Staff, Principal, Architect, or 3+ / 5+ year experienced positions.
+- Recommend only roles suitable for their career stage: Internships, Graduate Software Engineer, Junior Developer, Associate Software Engineer, or Entry-Level Engineer.
+- If raw search returns senior/lead roles, filter them out before presenting your response.`;
 
 @Injectable()
 export class AgentService {
@@ -119,6 +132,7 @@ export class AgentService {
     @Inject(DB_POOL) private readonly pool: Pool,
     private readonly jobsService: JobsService,
     private readonly resumeService: ResumeService,
+    private readonly portalService: PortalService,
   ) { }
 
   private readonly tools: Record<string, AgentTool> = {
@@ -128,12 +142,33 @@ export class AgentService {
     },
     search_jobs: {
       definition: TOOL_DEFINITIONS[1],
-      execute: async (args) =>
-        this.jobsService.searchJobs(String(args.query || ""), {
+      execute: async (args, userId) => {
+        let earlyCareer = typeof args.earlyCareerOnly === "boolean" ? args.earlyCareerOnly : undefined;
+        if (earlyCareer === undefined && userId) {
+          try {
+            const profile = await this.resumeService.getProfile(userId);
+            const isStudentStage =
+              !profile?.careerStage ||
+              profile.careerStage === "Student" ||
+              profile.careerStage === "New Graduate" ||
+              profile.careerStage === "Entry Level" ||
+              profile.careerStage === "Intern" ||
+              (profile.totalExperienceYears ?? 0) <= 2;
+            if (isStudentStage) {
+              earlyCareer = true;
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        return this.jobsService.searchJobs(String(args.query || ""), {
           location: typeof args.location === "string" ? args.location : undefined,
           employmentType: typeof args.employmentType === "string" ? args.employmentType : undefined,
-          limit: typeof args.limit === "number" ? args.limit : 5,
-        }),
+          earlyCareerOnly: earlyCareer,
+          limit: typeof args.limit === "number" ? args.limit : 8,
+        });
+      },
     },
     compute_match: {
       definition: TOOL_DEFINITIONS[2],
@@ -142,6 +177,10 @@ export class AgentService {
     get_skill_gap: {
       definition: TOOL_DEFINITIONS[3],
       execute: async (args, userId) => this.jobsService.analyzeSkillGap(userId, String(args.targetRole || "")),
+    },
+    save_job: {
+      definition: TOOL_DEFINITIONS[4],
+      execute: async (args, userId) => this.portalService.markOpportunitySaved(String(args.jobId || ""), userId),
     },
   };
 
@@ -188,6 +227,16 @@ export class AgentService {
     return res.rows;
   }
 
+  private buildSystemPrompt(userId: string): string {
+    return `${SYSTEM_PROMPT}
+
+Current User & Session Context:
+- The candidate is currently logged in. Authenticated User ID: "${userId}".
+- You already have full access to their session, database profile, and resume.
+- NEVER ask the user for their user ID, email address, password, or login credentials.
+- Whenever you need their resume, skills, experience, or education, call the "read_resume" tool directly to retrieve their profile from the database.`;
+  }
+
   private async runGroqPlanner(
     userId: string,
     userMessage: string,
@@ -199,7 +248,7 @@ export class AgentService {
     }
 
     const groqMessages: Array<Record<string, unknown>> = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: this.buildSystemPrompt(userId) },
       ...history.map((message) => ({
         role: message.role,
         content: message.content,
@@ -281,7 +330,7 @@ export class AgentService {
 
     try {
       for (let iteration = 0; iteration < 6; iteration += 1) {
-        const prompt = this.buildGeminiPlannerPrompt(plannerMessages);
+        const prompt = this.buildGeminiPlannerPrompt(userId, plannerMessages);
         const response = await fetchWithRetry(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`,
           {
@@ -361,7 +410,7 @@ export class AgentService {
         {
           role: "user",
           content:
-            "Stop calling tools now. Write the best final answer for the user using only the conversation and tool results already available. If something is missing, say what is missing briefly and give the next useful step.",
+            "Stop calling tools now. Write the best final answer for the user strictly in English using only the conversation and tool results already available. If recommending or mentioning jobs from search results, you MUST format them as clickable markdown links: [Job Title](url) at Company using the url from the tool results.",
         },
       ];
 
@@ -416,7 +465,7 @@ export class AgentService {
                   {
                     text: `${SYSTEM_PROMPT}
 
-The tool-planning loop has already run. Do not request another tool. Write the final answer for the user using only this conversation and tool context. If required information is missing, say that briefly and give the next useful step.
+The tool-planning loop has already run. Do not request another tool. Write the final answer for the user using only this conversation and tool context. If recommending or listing jobs, you MUST format each job as a clickable markdown link [Job Title](url) at Company using the url from the tool results. If required information is missing, say that briefly and give the next useful step.
 
 Conversation and tool context:
 ${formattedMessages}`,
@@ -447,12 +496,12 @@ ${formattedMessages}`,
     return this.runNoToolFallback("");
   }
 
-  private buildGeminiPlannerPrompt(messages: Array<{ role: string; content: string }>): string {
+  private buildGeminiPlannerPrompt(userId: string, messages: Array<{ role: string; content: string }>): string {
     const formattedMessages = messages
       .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
       .join("\n\n");
 
-    return `${SYSTEM_PROMPT}
+    return `${this.buildSystemPrompt(userId)}
 
 Available tools:
 ${JSON.stringify(this.getToolDefinitions().map((tool) => tool.function), null, 2)}
@@ -465,7 +514,7 @@ To call a tool:
 {
   "tool": {
     "name": "read_resume",
-    "args": { "userId": "${"{userId}"}" }
+    "args": {}
   }
 }
 
@@ -477,7 +526,6 @@ To answer the user:
 Important:
 - Do not call tools for general technical explanations, definitions, or casual chat.
 - Use only one tool call per JSON response.
-- Use the exact userId only if a tool requires it; the backend will also fill it safely.
 - Do not expose JSON, tool names, or implementation details in final answers.
 
 Conversation and tool context:

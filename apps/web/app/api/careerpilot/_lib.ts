@@ -63,10 +63,9 @@ export function logRouteError(route: string, error: unknown) {
 }
 
 export async function proxyOpportunityAction(
-  paramsPromise: Promise<{ id: string }>,
+  paramsPromise: Promise<{ id: string }> | { id: string },
   action: "apply" | "dismiss" | "restore" | "view" | "save" | "unsave"
 ) {
-
   try {
     const supabase = await createClient();
     const {
@@ -77,16 +76,18 @@ export async function proxyOpportunityAction(
       return structuredError("Unauthorized", 401);
     }
 
-    const { id: jobId } = await paramsPromise;
+    const resolved = await paramsPromise;
+    const jobId = resolved?.id;
     if (!jobId) {
       return Response.json({ error: "Job ID required" }, { status: 400 });
     }
 
     const response = await fetch(
-      `${getCareerPilotApiBaseUrl()}/opportunities/${jobId}/${action}?studentId=${user.id}`,
+      `${getCareerPilotApiBaseUrl()}/opportunities/${encodeURIComponent(jobId)}/${action}?studentId=${encodeURIComponent(user.id)}`,
       {
         method: "POST",
         headers: getInternalHeaders(),
+        cache: "no-store",
       }
     );
 

@@ -199,36 +199,65 @@ export default function CareerPilotPanel({ onSyncComplete }: CareerPilotPanelPro
 
   const renderMessageContent = (text: string) => {
     if (!text) return null;
+
+    // Strip internal metadata comments (e.g. <!-- fit-id: ... -->)
+    const cleanText = text.replace(/<!--[\s\S]*?-->/g, "");
+
+    // Match markdown links [Label](url) OR standalone http/https URLs
+    const combinedRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s)\]]+)/g;
     const parts = [];
-    const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
     let lastIndex = 0;
     let match;
 
-    while ((match = linkRegex.exec(text)) !== null) {
+    while ((match = combinedRegex.exec(cleanText)) !== null) {
       if (match.index > lastIndex) {
-        parts.push(text.slice(lastIndex, match.index));
+        parts.push(cleanText.slice(lastIndex, match.index));
       }
-      parts.push(
-        <a
-          key={match.index}
-          href={match[2]}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            color: "var(--accent)",
-            textDecoration: "underline",
-            fontWeight: 600,
-          }}
-        >
-          {match[1]} ↗
-        </a>
-      );
+
+      if (match[1] && match[2]) {
+        // [Label](url) format
+        parts.push(
+          <a
+            key={match.index}
+            href={match[2]}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              color: "var(--accent)",
+              textDecoration: "underline",
+              fontWeight: 600,
+            }}
+          >
+            {match[1]} ↗
+          </a>
+        );
+      } else if (match[3]) {
+        // Raw standalone URL
+        parts.push(
+          <a
+            key={match.index}
+            href={match[3]}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              color: "var(--accent)",
+              textDecoration: "underline",
+              fontWeight: 600,
+            }}
+          >
+            Apply / View Role ↗
+          </a>
+        );
+      }
+
       lastIndex = match.index + match[0].length;
     }
-    if (lastIndex < text.length) {
-      parts.push(text.slice(lastIndex));
+
+    if (lastIndex < cleanText.length) {
+      parts.push(cleanText.slice(lastIndex));
     }
-    return parts.length > 0 ? parts : text;
+
+    return parts.length > 0 ? parts : cleanText;
   };
 
   const suggestionChips = [

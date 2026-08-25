@@ -62,6 +62,8 @@ const EARLY_CAREER_POSITIVE_PATTERN =
   "(intern|internship|graduate|new grad|new graduate|fresher|freshers|entry level|entry-level|campus|university|student|trainee|associate|junior)";
 const SENIOR_EXPERIENCE_PATTERN =
   "([3-9]|[1-9][0-9])\\s*\\+?\\s*(years|yrs|year)\\s*(of\\s*)?(experience|exp)?|([3-9]|[1-9][0-9])\\s*-\\s*([4-9]|[1-9][0-9])\\s*(years|yrs)";
+const SENIOR_TITLE_PATTERN =
+  "\\m(senior|sr|sr\\.|lead|staff|principal|manager|architect|director|head|vp|executive|distinguished|iii|iv|v)\\M";
 
 @Injectable()
 export class JobsService {
@@ -109,7 +111,7 @@ export class JobsService {
           sql += ` AND j.employment_type = $${params.length}`;
         }
         if (filters.earlyCareerOnly) {
-          sql += this.earlyCareerSqlClause();
+          sql += ` AND ${this.earlyCareerSqlClause()}`;
         }
 
         params.push(limit * 2);
@@ -159,7 +161,7 @@ export class JobsService {
       }
 
       if (filters.earlyCareerOnly) {
-        sql += this.earlyCareerSqlClause();
+        sql += ` AND ${this.earlyCareerSqlClause()}`;
       }
 
       params.push(limit * 2);
@@ -238,7 +240,10 @@ export class JobsService {
     return `(
       j.employment_type = 'internship'
       OR (j.title || ' ' || COALESCE(j.description, '')) ~* '${EARLY_CAREER_POSITIVE_PATTERN}'
-      OR NOT ((j.title || ' ' || COALESCE(j.description, '')) ~* '${SENIOR_EXPERIENCE_PATTERN}')
+      OR (
+        NOT (j.title ~* '${SENIOR_TITLE_PATTERN}')
+        AND NOT ((j.title || ' ' || COALESCE(j.description, '')) ~* '${SENIOR_EXPERIENCE_PATTERN}')
+      )
     )`;
   }
 
@@ -424,13 +429,23 @@ export class JobsService {
   async getTopMatches(userId: string, limit = 20): Promise<Record<string, unknown>[]> {
     const fetchMatchesQuery = async () => {
       const res = await this.pool.query(
-        `SELECT jm.*,
+        `SELECT jm.id AS match_id,
+                jm.user_id,
+                jm.match_score,
+                jm.explanation,
+                jm.strengths,
+                jm.missing_skills,
+                jm.created_at,
+                j.id,
+                j.id AS job_id,
                 j.title,
                 j.url,
                 j.location,
                 j.logical_job_key,
                 c.name AS company_name,
                 COALESCE(ot.status, 'NOT_VIEWED') AS status,
+                COALESCE(ot.is_saved, FALSE) AS is_saved,
+                ot.saved_at,
                 ot.viewed_at,
                 ot.applied_at
          FROM job_matches jm
@@ -578,17 +593,18 @@ Job description (excerpt): ${String(job.description || "").slice(0, 800)}
 Vector similarity score: ${vectorScore === null ? "N/A" : `${Math.round(vectorScore * 100)}%`}
 
 Matching Rules:
-1. If the candidate's graduation year is 2025, 2026, or 2027 (meaning they are a student), and the job is a senior/lead/staff role or requires multiple years of professional experience (e.g. 3+, 5+, or 8+ years), the matchScore MUST be very low (between 5 and 20) and explanation must state that the candidate is a graduating student.
-2. If matchScore is below 90%, you MUST provide 1 to 4 clear, genuine reasons in "missingSkills" explaining why it isn't higher. Examples of valid gap items:
+1. All text outputs ("explanation", "strengths", "missingSkills") MUST be written strictly in clear English, even if the job description excerpt is in German, French, or another language.
+2. If the candidate's graduation year is 2025, 2026, or 2027 (meaning they are a student), and the job is a senior/lead/staff role or requires multiple years of professional experience (e.g. 3+, 5+, or 8+ years), the matchScore MUST be very low (between 5 and 20) and explanation must state that the candidate is a graduating student.
+3. If matchScore is below 90%, you MUST provide 1 to 4 clear, genuine reasons in "missingSkills" explaining why it isn't higher. Examples of valid gap items:
    - Specific missing technical skills (e.g. "Firmware", "Embedded Systems", "RTOS", "AWS", "Kubernetes")
    - Experience gap (e.g. "Professional firmware experience", "Multi-year production experience")
    - Specialization gap (e.g. "Hardware-software integration", "Distributed systems at scale")
-3. If matchScore is >= 90%, "missingSkills" can be empty [] if the profile has comprehensive coverage.
+4. If matchScore is >= 90%, "missingSkills" can be empty [] if the profile has comprehensive coverage.
 
 Return JSON only:
 {
   "matchScore": 85,
-  "explanation": "2-3 sentence explanation of the match",
+  "explanation": "2-3 sentence explanation of the match in English",
   "strengths": ["skill1", "skill2"],
   "missingSkills": ["gap1", "gap2"]
 }`;

@@ -2,6 +2,7 @@ import { LanguageDetector } from "./language-detector";
 import { SectionParser } from "./section-parser";
 import { RoleClassifier, RoleClassificationResult } from "./role-classifier";
 import { ExperienceParser, ExperienceClassificationResult } from "./experience-parser";
+import { JobTranslator } from "./job-translator";
 import { fetchGroqWithRotation } from "../utils/groq-keys";
 
 export interface JobToEvaluate {
@@ -20,6 +21,8 @@ export interface JobEvaluationResult {
   hasStructuredSections: boolean;
   evaluationMethod: "DETERMINISTIC" | "LLM_FALLBACK";
   logSummary: string;
+  translatedTitle?: string;
+  translatedDescription?: string;
 }
 
 export class JobRelevanceValidator {
@@ -27,11 +30,22 @@ export class JobRelevanceValidator {
     job: JobToEvaluate,
     options: { allowLlmFallback?: boolean } = { allowLlmFallback: true },
   ): Promise<JobEvaluationResult> {
-    const rawTitle = job.title || "";
-    const rawDesc = job.description || "";
+    let rawTitle = job.title || "";
+    let rawDesc = job.description || "";
+    let translatedTitle: string | undefined;
+    let translatedDescription: string | undefined;
 
-    // 1. Language Detection
-    const langResult = LanguageDetector.detect(rawDesc);
+    // 1. Language Detection & Automatic English Translation for International Jobs
+    const langResult = LanguageDetector.detect(rawDesc, rawTitle);
+    if (langResult.language === "NON_ENGLISH" && options.allowLlmFallback !== false) {
+      const translation = await JobTranslator.translateToEnglish(rawTitle, rawDesc, job.company);
+      if (translation.translated) {
+        translatedTitle = translation.title;
+        translatedDescription = translation.description;
+        rawTitle = translation.title;
+        rawDesc = translation.description;
+      }
+    }
 
     // 2. Section Parsing
     const parsedSections = SectionParser.parse(rawDesc);
@@ -51,7 +65,7 @@ export class JobRelevanceValidator {
 
     // --- DETERMINISTIC REJECTIONS (Zero Token Waste) ---
 
-    // A. Clearly Non-Technical (Even in Non-English, e.g. Sales, HR, Compliance)
+    // A. Clearly Non-Technical (Sales, HR, Cashier, Compliance, Catering)
     if (roleResult.state === "NON_TECHNICAL") {
       const reason = `non_technical_role (${roleResult.reasons[0] || "Title or category matches non-technical keywords"})`;
       return {
@@ -62,6 +76,8 @@ export class JobRelevanceValidator {
         hasStructuredSections: parsedSections.hasStructuredSections,
         evaluationMethod: "DETERMINISTIC",
         logSummary: `[Job Filter] Rejected: "${rawTitle}" — Reason: ${reason}`,
+        translatedTitle,
+        translatedDescription,
       };
     }
 
@@ -76,6 +92,8 @@ export class JobRelevanceValidator {
         hasStructuredSections: parsedSections.hasStructuredSections,
         evaluationMethod: "DETERMINISTIC",
         logSummary: `[Job Filter] Rejected: "${rawTitle}" — Reason: ${reason}`,
+        translatedTitle,
+        translatedDescription,
       };
     }
 
@@ -83,8 +101,7 @@ export class JobRelevanceValidator {
     if (
       roleResult.state === "TECHNICAL" &&
       expResult.state !== "EXPERIENCE_UNCERTAIN" &&
-      expResult.state !== "EXPERIENCE_CONFLICT" &&
-      langResult.language === "ENGLISH"
+      expResult.state !== "EXPERIENCE_CONFLICT"
     ) {
       return {
         status: "APPROVED",
@@ -94,6 +111,8 @@ export class JobRelevanceValidator {
         hasStructuredSections: parsedSections.hasStructuredSections,
         evaluationMethod: "DETERMINISTIC",
         logSummary: `[Job Filter] Accepted: "${rawTitle}" — Reason: technical_role + no_experience_violation`,
+        translatedTitle,
+        translatedDescription,
       };
     }
 

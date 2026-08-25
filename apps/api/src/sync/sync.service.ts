@@ -385,6 +385,13 @@ export class SyncService {
           rejectedCount++;
         }
 
+        if (evaluation.translatedTitle) {
+          job.title = evaluation.translatedTitle;
+        }
+        if (evaluation.translatedDescription) {
+          job.description = evaluation.translatedDescription;
+        }
+
         console.log(evaluation.logSummary);
 
         const logicalKey = LogicalJobKey.generate(

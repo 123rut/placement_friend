@@ -19,26 +19,48 @@ const COMMON_ENGLISH_WORDS = new Set([
   "experience", "skills", "requirements", "responsibilities", "team", "work"
 ]);
 
+const NON_LATIN_SCRIPT_REGEX = /[\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0600-\u06FF\u0590-\u05FF\u0900-\u097F]/;
+
+const UNAMBIGUOUS_NON_ENGLISH_TITLE_REGEX = /\b(specjalista|specjalistka|elektromechanik|praktykant|stażysta|inżynier|kierownik|doradca|sprzedawca|konsultant|kucharz|magazynier|koordynator|winkelmedewerker|medewerker|verkoopmedewerker|vakantiehulp|bijbaan|stagiair|stagiaire|alternance|chargé|responsable|conseiller|vendeur|mitarbeiter|werkstudent|fachkraft|sachbearbeiter|kaufmann|kauffrau|leiter|abteilung|ausbildung|desarrollador|prácticas|vacante|sviluppatore|tirocinio|utvecklare|medarbetare)\b/i;
+
 const COMMON_NON_ENGLISH_MARKERS = [
+  // Polish
+  /\b(wymagania|doświadczenie|stanowisko|pracy|obowiązki|oferujemy|oczekujemy|zakres|umowa)\b/i,
   // Spanish / Portuguese
   /\b(requisitos|experiencia|años|responsabilidades|descripción|equipo|trabajo|qualificações|conhecimento|anos|descrição)\b/i,
   // French
-  /\b(exigences|expérience|années|responsabilités|poste|profil|candidature)\b/i,
+  /\b(exigences|expérience|années|responsabilités|poste|profil|candidature|missions|compétences|rejoindre)\b/i,
   // German
-  /\b(anforderungen|erfahrung|jahre|verantwortung|qualifikationen|kenntnisse|stellenbeschreibung)\b/i,
+  /\b(anforderungen|erfahrung|jahre|verantwortung|qualifikationen|kenntnisse|stellenbeschreibung|aufgaben|profil|bewerbung)\b/i,
   // Dutch
-  /\b(vereisten|ervaring|jaren|verantwoordelijkheden|functieomschrijving)\b/i,
+  /\b(vereisten|ervaring|jaren|verantwoordelijkheden|functieomschrijving|vacature|teamleider|adviseur|klantenservice)\b/i,
   // Italian
-  /\b(requisiti|esperienza|anni|responsabilità|candidato)\b/i,
+  /\b(requisiti|esperienza|anni|responsabilità|candidato|mansioni)\b/i,
+  // Swedish / Nordic
+  /\b(krav|erfarenhet|ansvar|arbetsuppgifter|tillsvidare|heltid|deltid|ansökan)\b/i,
 ];
 
 export class LanguageDetector {
-  static detect(text: string): LanguageDetectionResult {
-    if (!text || text.trim().length < 20) {
+  static detect(text: string, title?: string): LanguageDetectionResult {
+    // 1. Non-Latin alphabet check (Cyrillic, CJK, Arabic, etc.)
+    if ((title && NON_LATIN_SCRIPT_REGEX.test(title)) || NON_LATIN_SCRIPT_REGEX.test(text.slice(0, 1000))) {
+      return { language: "NON_ENGLISH", confidence: 1.0, sampleMatchedWords: ["non_latin_characters"] };
+    }
+
+    // 2. Unambiguous non-English title check (e.g. Specjalista, Winkelmedewerker, etc.)
+    if (title) {
+      const titleMatch = title.match(UNAMBIGUOUS_NON_ENGLISH_TITLE_REGEX);
+      if (titleMatch) {
+        return { language: "NON_ENGLISH", confidence: 0.95, sampleMatchedWords: [titleMatch[0]] };
+      }
+    }
+
+    const combinedText = title ? `${title} ${text}` : text;
+    if (!combinedText || combinedText.trim().length < 20) {
       return { language: "ENGLISH", confidence: 0.5, sampleMatchedWords: [] };
     }
 
-    const cleanText = text.toLowerCase().replace(/[^a-zñáéíóúüäößàèìòùâêîôûç\s]/gi, " ");
+    const cleanText = combinedText.toLowerCase().replace(/[^a-zñáéíóúüäößàèìòùâêîôûç\s]/gi, " ");
     const words = cleanText.split(/\s+/).filter(w => w.length >= 2);
 
     if (words.length === 0) {
@@ -48,7 +70,7 @@ export class LanguageDetector {
     // Check for explicit foreign language marker patterns
     const nonEnglishMatches: string[] = [];
     for (const pattern of COMMON_NON_ENGLISH_MARKERS) {
-      const match = text.match(pattern);
+      const match = combinedText.match(pattern);
       if (match) {
         nonEnglishMatches.push(match[0]);
       }

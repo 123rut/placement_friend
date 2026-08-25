@@ -55,15 +55,33 @@ export default function DashboardOverview({
     { revalidateOnFocus: false }
   );
 
-  const matchedJobs: MatchedJobData[] = useMemo(
-    () => (Array.isArray(matchedJobsData) ? matchedJobsData : []),
-    [matchedJobsData]
-  );
-
   const savedJobsList: MatchedJobData[] = useMemo(
     () => (savedData?.data && Array.isArray(savedData.data) ? savedData.data : []),
     [savedData]
   );
+
+  const matchedJobs: MatchedJobData[] = useMemo(() => {
+    if (!Array.isArray(matchedJobsData)) return [];
+    const savedMap = new Map<string, MatchedJobData>();
+    savedJobsList.forEach((s) => {
+      const sId = s.job_id || s.id;
+      if (sId) savedMap.set(sId, s);
+    });
+
+    return matchedJobsData.map((job) => {
+      const id = job.job_id || job.id;
+      const savedInfo = id ? savedMap.get(id) : undefined;
+      return {
+        ...job,
+        title: job.title || job.role || "Role",
+        url: job.url || job.apply_url || "#",
+        is_saved: typeof job.is_saved === "boolean" ? job.is_saved : (savedInfo?.is_saved ?? false),
+        status: job.status && job.status !== "NOT_VIEWED" ? job.status : (savedInfo?.status ?? job.status ?? "NOT_VIEWED"),
+        applied_at: job.applied_at || savedInfo?.applied_at || null,
+        saved_at: job.saved_at || savedInfo?.saved_at || null,
+      };
+    });
+  }, [matchedJobsData, savedJobsList]);
 
   // Real backend metrics
   const bookmarkedCount = useMemo(
@@ -75,7 +93,7 @@ export default function DashboardOverview({
     [savedJobsList]
   );
   const strongMatchesSavedCount = useMemo(
-    () => savedJobsList.filter((j) => (j.match_score ?? 0) >= 65).length,
+    () => savedJobsList.filter((j) => (j.match_score ?? j.matchScore ?? 0) >= 65).length,
     [savedJobsList]
   );
 
@@ -111,8 +129,8 @@ export default function DashboardOverview({
   // Top Recommendations (Top 3 highest score matches)
   const topRecommendations = useMemo(() => {
     return matchedJobs
-      .filter((job) => typeof job.match_score === "number")
-      .sort((a, b) => (b.match_score || 0) - (a.match_score || 0))
+      .filter((job) => typeof (job.match_score ?? job.matchScore) === "number")
+      .sort((a, b) => (b.match_score ?? b.matchScore ?? 0) - (a.match_score ?? a.matchScore ?? 0))
       .slice(0, 3);
   }, [matchedJobs]);
 
@@ -343,22 +361,6 @@ export default function DashboardOverview({
               </div>
             </div>
           </div>
-
-          <Link
-            href="/profile"
-            className="primary-link ghost-link"
-            style={{
-              fontSize: "0.82rem",
-              padding: "6px 14px",
-              borderRadius: "999px",
-              background: "rgba(255, 255, 255, 0.04)",
-              border: "1px solid rgba(255, 255, 255, 0.15)",
-              color: "var(--text-primary)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            View Profile →
-          </Link>
         </div>
 
         <div
@@ -554,10 +556,16 @@ export default function DashboardOverview({
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             {topRecommendations.map((job) => {
               const actualJobId = job.job_id || job.id;
+              const actualTitle = job.title || job.role || "Role";
+              const actualUrl = job.url || job.apply_url || "#";
               const isSaved = !!job.is_saved;
-              const scoreVal = typeof job.match_score === "number" ? Math.round(job.match_score) : null;
+              const scoreVal = typeof (job.match_score ?? job.matchScore) === "number" ? Math.round(job.match_score ?? job.matchScore!) : null;
               const strengths = Array.isArray(job.strengths) ? job.strengths : [];
-              const gaps = Array.isArray(job.missing_skills) ? job.missing_skills : [];
+              const gaps = (Array.isArray(job.missing_skills) && job.missing_skills.length > 0)
+                ? job.missing_skills
+                : (Array.isArray(job.missingSkills) && job.missingSkills.length > 0)
+                  ? job.missingSkills
+                  : [];
 
               return (
                 <article
@@ -592,7 +600,7 @@ export default function DashboardOverview({
                       </span>
 
                       <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0, color: "var(--text-primary)" }}>
-                        {job.title}
+                        {actualTitle}
                       </h3>
 
                       {/* Location & Type Strip */}
@@ -714,7 +722,7 @@ export default function DashboardOverview({
 
                       {/* Primary View Job CTA */}
                       <a
-                        href={job.url}
+                        href={actualUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={() => handleOpenJob(actualJobId)}

@@ -6,14 +6,18 @@ import { OpportunityStatus } from "./OpportunityCard";
 export interface MatchedJobData {
   id: string;
   job_id?: string;
-  title: string;
-  url: string;
+  title?: string;
+  role?: string;
+  url?: string;
+  apply_url?: string;
   location: string | null;
   company_name: string;
-  match_score: number | null;
+  match_score?: number | null;
+  matchScore?: number | null;
   explanation: string | null;
   strengths: string[] | null;
-  missing_skills: string[] | null;
+  missing_skills?: string[] | null;
+  missingSkills?: string[] | null;
   status?: OpportunityStatus;
   is_saved?: boolean;
   saved_at?: string | null;
@@ -30,6 +34,8 @@ interface MatchedJobCardProps {
 
 export default function MatchedJobCard({ job, onStatusChange, onToggleSave, onDismiss }: MatchedJobCardProps) {
   const actualJobId = job.job_id || job.id;
+  const actualTitle = job.title || job.role || "Role";
+  const actualUrl = job.url || job.apply_url || "#";
   const [currentStatus, setCurrentStatus] = useState<OpportunityStatus>(
     job.status || "NOT_VIEWED"
   );
@@ -40,7 +46,6 @@ export default function MatchedJobCard({ job, onStatusChange, onToggleSave, onDi
   );
   const [markingApplied, setMarkingApplied] = useState(false);
   const [dismissing, setDismissing] = useState(false);
-
 
   const handleDismiss = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -85,15 +90,19 @@ export default function MatchedJobCard({ job, onStatusChange, onToggleSave, onDi
     if (isSaving) return;
     const nextSaved = !isSaved;
     setIsSaved(nextSaved);
-    onToggleSave?.(actualJobId, nextSaved);
     setIsSaving(true);
     try {
-      const endpoint = nextSaved
-        ? `/api/opportunities/${actualJobId}/save`
-        : `/api/opportunities/${actualJobId}/unsave`;
-      await fetch(endpoint, { method: "POST" });
+      if (onToggleSave) {
+        await onToggleSave(actualJobId, nextSaved);
+      } else {
+        const endpoint = nextSaved
+          ? `/api/opportunities/${actualJobId}/save`
+          : `/api/opportunities/${actualJobId}/unsave`;
+        await fetch(endpoint, { method: "POST" });
+      }
     } catch (err) {
       console.error("Failed to toggle save:", err);
+      setIsSaved(!nextSaved);
     } finally {
       setIsSaving(false);
     }
@@ -123,7 +132,18 @@ export default function MatchedJobCard({ job, onStatusChange, onToggleSave, onDi
     }
   };
 
-  const scoreVal = typeof job.match_score === "number" ? Math.round(job.match_score) : null;
+  const scoreVal =
+    typeof job.match_score === "number"
+      ? Math.round(job.match_score)
+      : typeof job.matchScore === "number"
+        ? Math.round(job.matchScore)
+        : null;
+
+  const gapsList = (Array.isArray(job.missing_skills) && job.missing_skills.length > 0)
+    ? job.missing_skills
+    : (Array.isArray(job.missingSkills) && job.missingSkills.length > 0)
+      ? job.missingSkills
+      : [];
 
   return (
     <article
@@ -139,7 +159,7 @@ export default function MatchedJobCard({ job, onStatusChange, onToggleSave, onDi
         <div className="opportunity-topline">
           <div>
             <span className="section-label accent-label">{job.company_name}</span>
-            <h3 className="opportunity-title">{job.title}</h3>
+            <h3 className="opportunity-title">{actualTitle}</h3>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
             {scoreVal !== null && (
@@ -183,12 +203,6 @@ export default function MatchedJobCard({ job, onStatusChange, onToggleSave, onDi
               {isSaved ? "⭐ Saved" : "☆ Save"}
             </button>
 
-            {currentStatus === "APPLIED" && (
-              <span className="pill status-good" style={{ fontSize: "0.72rem", padding: "2px 8px" }}>
-                ✓ Applied
-              </span>
-            )}
-
             <button
               type="button"
               onClick={handleDismiss}
@@ -198,22 +212,24 @@ export default function MatchedJobCard({ job, onStatusChange, onToggleSave, onDi
                 borderRadius: "8px",
                 padding: "3px 8px",
                 fontSize: "0.74rem",
+                background: "transparent",
+                border: "1px solid var(--line)",
+                color: "var(--muted)",
                 cursor: "pointer",
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "4px",
-                fontWeight: 600,
+                transition: "all 0.15s ease",
               }}
             >
-              🚫 Not Interested
+              ✕
             </button>
-
           </div>
         </div>
 
 
-        {/* Location & Employment Strip */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", fontSize: "0.82rem", color: "var(--muted)", marginTop: "8px" }}>
+        {/* Location & Status Strip */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", fontSize: "0.8rem", color: "var(--muted)", marginTop: "8px" }}>
           <span>📍 {job.location || "Location not listed"}</span>
           <span>•</span>
           <span>💼 Full-time</span>
@@ -221,15 +237,14 @@ export default function MatchedJobCard({ job, onStatusChange, onToggleSave, onDi
           <span>🎓 Early Career</span>
         </div>
 
-        {/* Criteria Skill Tags: Strengths & Gaps */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "14px" }}>
-          {/* Matched Strengths */}
+        {/* Strengths & Missing Skills */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "12px" }}>
           {Array.isArray(job.strengths) && job.strengths.length > 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
               <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", marginRight: "2px" }}>
                 Strengths:
               </span>
-              {job.strengths.slice(0, 4).map((s) => (
+              {job.strengths.slice(0, 3).map((s) => (
                 <span
                   key={s}
                   style={{
@@ -249,12 +264,12 @@ export default function MatchedJobCard({ job, onStatusChange, onToggleSave, onDi
           )}
 
           {/* Gaps: Displayed if score < 90% or if specific missing skills are detected */}
-          {Array.isArray(job.missing_skills) && job.missing_skills.length > 0 ? (
+          {gapsList.length > 0 ? (
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
               <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", marginRight: "2px" }}>
                 Gaps:
               </span>
-              {job.missing_skills.slice(0, 3).map((g) => (
+              {gapsList.slice(0, 3).map((g) => (
                 <span
                   key={g}
                   style={{
@@ -271,25 +286,6 @@ export default function MatchedJobCard({ job, onStatusChange, onToggleSave, onDi
                 </span>
               ))}
             </div>
-          ) : scoreVal !== null && scoreVal < 90 ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", marginRight: "2px" }}>
-                Gaps:
-              </span>
-              <span
-                style={{
-                  fontSize: "0.74rem",
-                  fontWeight: 500,
-                  padding: "2px 8px",
-                  borderRadius: "6px",
-                  background: "rgba(245, 158, 11, 0.08)",
-                  border: "1px solid rgba(245, 158, 11, 0.25)",
-                  color: "var(--warn)",
-                }}
-              >
-                ○ {scoreVal < 60 ? "Specialized domain experience & depth" : scoreVal < 75 ? "Advanced domain tooling & systems" : "Project depth in production environment"}
-              </span>
-            </div>
           ) : null}
         </div>
       </div>
@@ -300,7 +296,7 @@ export default function MatchedJobCard({ job, onStatusChange, onToggleSave, onDi
       <div className="opportunity-footer" style={{ marginTop: "16px" }}>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           <a
-            href={job.url}
+            href={actualUrl}
             target="_blank"
             rel="noopener noreferrer"
             onClick={handleOpenRole}

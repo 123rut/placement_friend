@@ -716,6 +716,52 @@ ${rawText.slice(0, 8000)}`;
 
     const row = res.rows[0];
     if (!row) {
+      const studentRes = await this.pool.query(
+        `SELECT s.id, s.full_name, s.college_email, s.branch, s.cgpa, s.batch_year, c.name as college_name
+         FROM students s
+         LEFT JOIN colleges c ON s.college_id = c.id
+         WHERE s.id = $1`,
+        [userId],
+      );
+      const student = studentRes.rows[0];
+      if (student) {
+        return {
+          id: student.id,
+          userId: student.id,
+          personal: {
+            name: student.full_name,
+            email: student.college_email,
+            phone: "",
+            location: "",
+          },
+          summary: `${student.branch} student (Class of ${student.batch_year}) at ${student.college_name || "University"}.`,
+          skills: [],
+          experience: [],
+          education: [
+            {
+              degree: "Bachelor of Technology",
+              normalizedDegree: "B.Tech",
+              branch: student.branch,
+              college: student.college_name || "",
+              year: Number(student.batch_year),
+            },
+          ],
+          projects: [],
+          certifications: [],
+          achievements: [],
+          publications: [],
+          languages: [],
+          preferredRoles: [],
+          preferredIndustries: [],
+          workAuthorization: "",
+          totalExperienceYears: 0,
+          currentRole: "Student",
+          currentCompany: student.college_name || "",
+          careerStage: "Student",
+          preferredLocation: "",
+          createdAt: new Date().toISOString(),
+        };
+      }
       return null;
     }
 
